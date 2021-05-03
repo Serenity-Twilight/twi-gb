@@ -1,0 +1,10 @@
+# Ignore automatically generated files and directories.
+obj
+make
+dobj
+dmake
+dtwi-gb
+dtwi-gb.exe
+twi-gb
+twi-gb.exe
+
