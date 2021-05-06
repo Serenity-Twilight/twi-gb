@@ -1,4 +1,7 @@
 #========================================================================
+# List twi source files to compile and link here.
+define twi_source
+endef
 # List twi_gb source files to compile and link here.
 define twi_gb_source 
 	main.c
@@ -8,41 +11,87 @@ endef
 # UNLESS YOU KNOW EXACTLY WHAT YOU ARE DOING!
 #========================================================================
 
-# TODO: Build list of object and make files from list of source files.
-# TODO: Append full filepath to each source file in source file lists.
+# Build list of sources with full directories from source variables
+# above.
+define src_files := 
+	$(addprefix src/twi/,$(twi_source))
+	$(addprefix src/twi/gb/,$(twi_gb_source))
+endef
+
+# Debug object files
+dobj_files := $(patsubst src/%.c,dobj/%.o,$(src_files))
+# Release object files
+obj_files := $(patsubst src/%.c,obj/%.o,$(src_files))
+
+# Debug and release make files.
+make_files := $(patsubst src/%.c,make/%.mk,$(src_files))
+
+# Directories
+includes_dir = includes
+libs_dir = libs
+
+# Compilation flags
+CFLAGS := -I$(includes_dir) -L$(libs_dir)
+DBG_CFLAGS := -g
+RLS_CFLAGS :=
 
 # If C compiler isn't set, use default of cc.
-cc ?= cc
+CC ?= cc
+
+#========================================================================
+# RELEASE RULES
+#========================================================================
+r: release
+rel: release
+rls: release
+release: twi-gb
+
+# Link release binary
+twi-gb twi-gb.exe: $(obj_files)
+	$(CC) $(CFLAGS) $(RLS_CFLAGS) $(obj_files) -o $@
+
+# Compile release object files
+obj/%.o:
+	@mkdir -p $(@D)
+	$(CC) -c $(CFLAGS) $(RLS_CFLAGS) src/$*.c -o $@
 
 #========================================================================
 # DEBUG RULES
 #========================================================================
 d: debug
 dbg: debug
-debug: ddirs dtwi-gb
+debug: dtwi-gb
 
-# Build debug binary.
-dtwi-gb dtwi-gb.exe: 
+# Link debug binary
+dtwi-gb dtwi-gb.exe: $(dobj_files)
+	$(CC) $(CFLAGS) $(DBG_CFLAGS) $(dobj_files) -o $@
+
+# Compile debug object files
+dobj/%.o:
+	@mkdir -p $(@D)
+	$(CC) -c $(CFLAGS) $(DBG_CFLAGS) src/$*.c -o $@
 
 #========================================================================
 # Uses specified C compiler to generate a makefile (.mk) for the object
 # file to-be-created from the prerequisite source file.
-# This resulting makefile contains a single rule with the object file
-# as the target and every non-system header included by the original
-# source file as a prerequisite.
+# This resulting makefile contains a single rule with the debug and
+# release object files as its targets, and the base source file and
+# every non-system source and header file which it includes as its
+# prerequisites.
 
-# Debug makefiles
-dmake/%.mk: src/%.c
-	mkdir -p $(@D)
-	$(cc) -MM -MT dobj/$*.o -MF $@ $^
+make/%.mk: src/%.c
+	@mkdir -p $(@D)
+	$(CC) -MM -MT "dobj/$*.o obj/$*.o" -MF $@ $^
 #========================================================================
 
 #========================================================================
 # Deletes all automatically-generated files.
 .PHONY: clean
 clean:
-	rm -rf obj dobj make dmake dtwi-gb dtwi-gb.exe twi-gb twi-gb.exe
+	rm -rf dobj obj dmake make dtwi-gb dtwi-gb.exe twi-gb twi-gb.exe
 #========================================================================
 
 # Include all automatically-generated makefiles.
-# TODO
+# This is done below all rules to ensure that included rules will never
+# be the default rules.
+include $(make_files)
