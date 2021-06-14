@@ -1,6 +1,7 @@
 #========================================================================
 # List twi source files to compile and link here.
 define twi_source
+	log.c
 endef
 # List twi_gb source files to compile and link here.
 define twi_gb_source 
@@ -81,7 +82,7 @@ dobj/%.o:
 
 make/%.mk: src/%.c
 	@mkdir -p $(@D)
-	$(CC) -MM -MT "dobj/$*.o obj/$*.o" -MF $@ $^
+	$(CC) $(CFLAGS) -MM -MT "dobj/$*.o obj/$*.o" -MF $@ $^
 #========================================================================
 
 #========================================================================
