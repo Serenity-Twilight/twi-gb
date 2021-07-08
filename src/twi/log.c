@@ -27,18 +27,18 @@ enum twi_log_flags {
 // def struct twi_log_timestamp
 //
 // The twi_log timestamp, represented by a number of days, hours
-// minutes, seconds, and milliseconds. Each time unit less than a day
+// minutes, seconds, and microseconds. Each time unit less than a day
 // is wrapped so that its total value is less than a value which would
 // be equivalent to at least one of a greater time unit.
 //
-// millis is bound between the values of 0-99999 inclusive.
+// micros is bound between the values of 0-99999 inclusive.
 // seconds is bound between the values of 0-59 inclusive.
 // mintues is bound between the values of 0-59 inclusive.
 // hours is bound between the values of 0-23 inclusive.
 //======================================================================
 struct twi_log_timestamp {
 	uint64_t days;
-	uint32_t millis;
+	uint32_t micros;
 	uint8_t seconds;
 	uint8_t minutes;
 	uint8_t hours;
@@ -81,13 +81,13 @@ twi_log_get_elapsed_time(
 			uint64_t tmp_timestamp =
 				(uint64_t)difftime(now->tv_sec, log->epoch.tv_sec);
 			
-			// Ensure nanosecond count is positive, and convert to milliseconds.
+			// Ensure nanosecond count is positive, and convert to microseconds.
 			int32_t tmp_nano = nov.tv_nsec - log->epoch.tv_nsec;
 			if (tmp_nano < 0) {
 				tmp_timestamp -= 1;
-				elapsed.millis = (tmp_nano + 1000000000) / 1000;
+				elapsed.micros = (tmp_nano + 1000000000) / 1000;
 			} else {
-				elapsed.millis = tmp_nano / 1000;
+				elapsed.micros = tmp_nano / 1000;
 			}
 
 			// Derive wrapped timestamp values from the unwrapped tmp_timestamp.
@@ -238,7 +238,7 @@ twi_log_write(
 					"[%.*" PRIu64 "%s%02" PRIu8 ":%02" PRIu8 ":%02" PRIu8 ".%06" PRIu32 // Timestamp
 					"] (%s):%s:%ld: %s", // (level):filename:line: msg
 					days_max_width, elapsed.days, days_separator,
-					elapsed.hours, elapsedminutes, elapsed.seconds, elapsed.millis,
+					elapsed.hours, elapsedminutes, elapsed.seconds, elapsed.micros,
 					twi_log_level_string(level), filename, line, msg
 			)) < 0) {
 				stdio_failure = "snprintf() with timestamp";
