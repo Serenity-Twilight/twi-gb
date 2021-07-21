@@ -2,7 +2,7 @@
 #define TWI_LOG_H
 
 #include <stdint.h>
-#include <time.h>
+#include <stdio.h>
 
 //======================================================================
 // decl enum twi_log_level
@@ -11,41 +11,49 @@
 // Logging levels for twi_log, with lower levels indicating more
 // urgent messages, and higher levels indicating messages which are
 // intended more for informational purposes.
+//
+// Values:
+// - TWI_LOG_LEVEL_NONE: Pseudo-logging level. A log with
+//   TWI_LOG_LEVEL_NONE as its max level will discard all logging
+//   messages. A log message with level TWI_LOG_LEVEL_NONE will always
+//   be discarded. A TWI_LOG_LEVEL_GLOBAL_MAX of TWI_LOG_LEVEL_NONE
+//   will erase all logging operations from the compiled program.
+//
+// - TWI_LOG_LEVEL_FATAL: Logging level indicating errors from which
+//   the process cannot recover, and termination is the only option.
+//
+// - TWI_LOG_LEVEL_ERROR: Logging level indicating errors which are
+//   non-fatal.
+//
+// - TWI_LOG_LEVEL_WARN: Logging level indicating the detection of
+//   unusual circumstances which are not incorrect or impossible,
+//   but uncommon and may indicate a larger error.
+//
+// - TWI_LOG_LEVEL_INFO: Logging level for messages which inform the
+//   user of normal state changes and operation progress.
+//
+// - TWI_LOG_LEVEL_DEBUG: Logging level for messages containing
+//   information useful for discovering logic errors in the application.
+//
+// - TWI_LOG_LEVEL_TRACE: Logging level for messages containing very
+//   specific state and position information used for tracing the
+//   execution path taken by the process.
 //======================================================================
 enum twi_log_level {
-	// Pseudo logging level. A log with TWI_LOG_LEVEL_NONE set as its
-	// max level will never be written to. A log message with its level
-	// indicated as TWI_LOG_LEVEL_NONE will never be written. A
-	// TWI_LOG_GLOBAL_MAX_LEVEL of TWI_LOG_LEVEL_NONE will disable all
-	// logging throughout the entire program.
 	TWI_LOG_LEVEL_NONE,
-	// Logging level indicating fatal errors from which the program cannot
-	// be reasonably expected to recover.
 	TWI_LOG_LEVEL_FATAL,
-	// Logging level for errors in execution which are not necessarily
-	// or immediately fatal, but still require urgent attention.
 	TWI_LOG_LEVEL_ERROR,
-	// Logging level for warning of abnormal running conditions which
-	// may or may not indicate an erroneous state. Warnings should be
-	// issued in valid but unusual circumstances
-	// (Example: missing configuration file, which will always happen
-	// on first run or after configuration has been deleted).
 	TWI_LOG_LEVEL_WARN,
-	// Logging level for reporting information which may be useful in
-	// normal operation, such as state changes or progress reports.
 	TWI_LOG_LEVEL_INFO,
-	// Logging level for debug messages.
 	TWI_LOG_LEVEL_DEBUG,
-	// Logging level for debug messages which aid in tracking the
-	// execution path of the program, such as reporting function entries
-	// and exits, and what arguments are passed.
 	TWI_LOG_LEVEL_TRACE
 };
 
 // Defines the maximum logging level to acknowledge at compile time.
-// Used to optimize out higher logging levels, which are likely to
-// occur more frequently and be more verbose, out of the program
-// during compilation, removing their impact on performance.
+// Used to remove higher logging level messages during compilation,
+// which are likely to occur more frequently and therefore have a
+// greater impact on performance.
+//
 // If no max level is specified, then all levels are enabled.
 #ifndef TWI_LOG_LEVEL_GLOBAL_MAX
 #	define TWI_LOG_LEVEL_GLOBAL_MAX TWI_LOG_LEVEL_TRACE
@@ -55,39 +63,113 @@ enum twi_log_level {
 // decl struct twi_log
 // def struct twi_log
 //
-// twi_log state struct
+// Logging object. Contains references and metadata for formatting
+// and writing log messages.
+//
+// Members:
+//----------------------------------------------------------------------
+// - stream (INTERNAL):
+// Output stream and the target of all log messages.
+//----------------------------------------------------------------------
+// - implicit_fp:
+// Implicit filepath prefix omitted from log messages to preserve
+// horizontal space.
+//
+// If `implicit_fp` points to a null-terminated character array,
+// filepaths provided with log messages will have the implicit
+// filepath truncated from the front of the filepath written into the
+// log if and only if the filepath is prefixed with characters
+// matching all of the characters of the implicit filepath (excluding
+// null terminator). See examples below for further explanation.
+//
+// If `implicit_fp` points to NULL, this behavior is disabled and all
+// filepaths are written in their entirety to their associated log
+// message.
+//
+// If `implicit_fp` points to anything else, behavior is undefined.
+//
+// Examples:
+// - If the implicit filepath is "src/", and the real filepath is
+//   "src/main.c", the filepath will appear as "main.c" in the log
+//   message.
+// - If the implicit filepath is "src" and the real filepath is
+//   "src/main.c", the filepath will appear as "/main.c" in the log
+//   message.
+// - If the implicit filepath is "src/a" and the real filepath is
+//   "src/main.c", the filepath will appear as "src/main.c" in the
+//   log message.
+// - If the implicit filepath is "main.c" and the real filepath is
+//   "src/main.c", the filepath will appear as "src/main.c" in the
+//   log message.
+//----------------------------------------------------------------------
+// - epoch (INTERNAL):
+// Timestamp acquired upon the initialization of the twi_log.
+// Used to derive relative timestamps used in log messages.
+//----------------------------------------------------------------------
+// - max_lvl:
+// The maximum level of incoming logs which will be
+// written to `stream`. Logs whose levels are higher than this value
+// will be discarded.
+//
+// See enum twi_log_level for a complete list of logging levels and
+// each's intended use.
+//----------------------------------------------------------------------
+// - flags (INTERNAL):
+// Internal state flags.
 //======================================================================
 struct twi_log {
-	// Output stream written to by TWI_LOG().
-	FILE* target;
-	// Filename prefix to trim from incoming filenames.
-	// Any filename written to the log whose prefix matches the
-	// contents of the character array pointed to by trim_filename_prefix
-	// will be removed. Used to remove implicit directories from listed
-	// filenames, saving line width. Note that the entirety of
-	// trim_filename_prefix must match the start of a filename string
-	// for trimming to occur.
-	//
-	// For example, if TWI_LOG is invoked from within the file
-	// "src/main.c", and trim_filename_prefix = "src/", the filename
-	// will be logged as "main.c". If trim_filename_prefix = "src", then
-	// the filename would appear as "/main.c". If
-	// trim_filename_prefix = "src//", then the filename is unchanged.
-	const char* trim_filename_prefix;
-	// INTERNAL USE ONLY
-	// The timestamp at which a twi_log object was initialized.
-	// Used for calculating timestamps.
+	FILE* stream;
+	char* implicit_fp;
 	struct timespec epoch;
-	// The maximum twi_log_level whose messages that a particular
-	// twi_log will log. Any message whose twi_log_level is less than
-	// or equal to this level (assuming that the level does not exceed
-	// TWI_LOG_LEVEL_GLOBAL_MAX and is not TWI_LOG_LEVEL_NONE) will be
-	// logged, and any other value will be ignored.
-	uint8_t max_level;
-	// INTERNAL USE ONLY
-	// Internal state flags. Described in source file.
+	uint8_t max_lvl;
 	uint8_t flags;
 };
+
+//======================================================================
+// decl twi_log_init()
+//
+// Initializes the twi_log pointed to by `log` with maximum logging
+// level of `max_lvl`.
+//
+// This function should be called exactly once on a twi_log before
+// proceeding with any other operations on that twi_log. Attempting to
+// use an uninitialized twi_log or attempting to initialize a single
+// twi_log more than once without a call to twi_log_destroy between
+// each pair of initializations will result in undefined behavior.
+//
+// Parameters:
+//----------------------------------------------------------------------
+// - log
+// Pointer to an uninitialized twi_log.
+//----------------------------------------------------------------------
+// - max_lvl
+// The value to be set as `log`'s maximum allowed logging level.
+// See the definition of enum twi_log_level for additional information.
+//======================================================================
+void
+twi_log_init(
+		struct twi_log* log,
+		enum twi_log_level max_lvl
+);
+
+//======================================================================
+// decl twi_log_destroy()
+//
+// Releases the resources held by the twi_log pointed to by `log`,
+// putting it into an unusable state and making the memory occupied by
+// the twi_log safe to release or reinitialize using twi_log_init().
+//
+// If twi_log_destroy() is called on a twi_log which has yet to be
+// initialized or has been destroyed previously without reinitialization,
+// behavior is undefined.
+//
+// Parameters:
+//----------------------------------------------------------------------
+// - log
+// Pointer to a previously initialized twi_log.
+//======================================================================
+void
+twi_log_destroy(struct twi_log* log);
 
 //======================================================================
 // decl TWI_LOG()
@@ -133,8 +215,9 @@ struct twi_log {
 //======================================================================
 #define TWI_LOG(log_ptr, lvl, msg, ...) \
 	if (lvl != TWI_LOG_LEVEL_NONE \
-	 && lvl <= TWI_LOG_LEVEL_GLOBAL_MAX \
-	 && log_ptr && log_ptr->target && lvl <= log_ptr->max_level) { \
+		&& lvl <= TWI_LOG_LEVEL_GLOBAL_MAX \
+		&& (log_ptr) != NULL \
+		&& lvl <= (log_ptr)->max_lvl) { \
 		twi_log_write( \
 				log_ptr, \
 				lvl, \
@@ -159,6 +242,55 @@ struct twi_log {
 	TWI_LOG(log_ptr, TWI_LOG_LEVEL_DEBUG, msg, ##__VA_ARGS__)
 #define TWI_LOGT(log_ptr, msg, ...) \
 	TWI_LOG(log_ptr, TWI_LOG_LEVEL_TRACE, msg, ##__VA_ARGS__)
+
+//======================================================================
+// decl twi_log_stream_open()
+//
+// Opens the file specified by `filename` and sets it as the new
+// target output stream of `log`.
+//
+// If another stream is already open in `log`, it will be closed
+// before attempting to open a stream to the file `filename`.
+//
+// If this function fails to open a new output stream to `filename`,
+// it will return with a non-zero value and `log` will be left without
+// an open output stream. If `log` already contained an open output
+// stream before the call, it will have been closed.
+//
+// Parameters:
+//----------------------------------------------------------------------
+// - log
+// Pointer to an initialized twi_log.
+//----------------------------------------------------------------------
+// - filename
+// Pointer to a null-terminated character array representative of the
+// name of a file.
+//----------------------------------------------------------------------
+//
+// Returns:
+// 0 on success, non-zero on failure.
+//======================================================================
+int
+twi_log_stream_open(
+		struct twi_log* log,
+		const char* filename
+);
+
+//======================================================================
+// decl twi_log_stream_close()
+//
+// Closes the internal target output stream used by `log`.
+//
+// If no internal target output stream is open in `log` at the time
+// that this function is called, then this function does nothing.
+//
+// Parameters:
+//----------------------------------------------------------------------
+// - log
+// Pointer to an initialized twi_log.
+//======================================================================
+void
+twi_log_stream_close(struct twi_log* log);
 
 //======================================================================
 // decl twi_log_write()
