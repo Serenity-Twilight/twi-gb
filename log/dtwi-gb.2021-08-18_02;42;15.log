@@ -1,0 +1,12 @@
+[0.000112] (DD) gb/main.c:13: TWI_GB_PROGNAME = dtwi-gb
+[0.000147] (EE) gb/main.c:14: TWI_LOG_LEVEL_TRACE = 6, TWI_LOG_LEVEL_GLOBAL_MAX = 6
+[0.000154] (FF) gb/main.c:16: This is a logging message with level FATAL. No substitutions.
+[0.000157] (EE) gb/main.c:17: This is a logging message with level ERROR. No substitutions.
+[0.000161] (WW) gb/main.c:18: This is a logging message with level WARN. No substitutions.
+[0.000164] (II) gb/main.c:19: This is a logging message with level INFO. No substitutions.
+[0.000167] (DD) gb/main.c:20: This is a logging message with level DEBUG. No substitutions.
+[0.000169] (TT) gb/main.c:21: This is a logging message with level TRACE. No substitutions.
+[0.000172] (TT) gb/main.c:22: Substitutions:
+int = 500
+str = This is dynamically written! Wow!
+[0.000175] (II) log.c:263: Log closed normally.

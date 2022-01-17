@@ -6,6 +6,7 @@ endef
 # List twi_gb source files to compile and link here.
 define twi_gb_source 
 	main.c
+	log.c
 endef
 #========================================================================
 # DO NOT MODIFY ANYTHING BELOW THIS POINT
@@ -33,8 +34,8 @@ libs_dir = libs
 
 # Compilation flags
 CFLAGS := -I$(includes_dir) -L$(libs_dir)
-DBG_CFLAGS := -g
-RLS_CFLAGS :=
+DBG_CFLAGS := -g -DTWI_GB_PROGNAME=\"dtwi-gb\" -DTWI_GB_MAX_LOGS=0
+RLS_CFLAGS := -DTWI_GB_NDEBUG -DTWI_GB_PROGNAME=\"twi-gb\" -DTWI_GB_MAX_LOGS=3
 
 # If C compiler isn't set, use default of cc.
 CC ?= cc
