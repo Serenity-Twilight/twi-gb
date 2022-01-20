@@ -10,7 +10,7 @@ enum twi_status {
 	TWI_STATUS_OK = 0,
 	TWI_STATUS_NOMEM,
 	TWI_STATUS_NOSTREAM
-} // end enum twi_status
+}; // end enum twi_status
 
 //=======================================================================
 // decl twi_status_str
