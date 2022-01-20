@@ -1,12 +1,11 @@
 #========================================================================
 # List twi source files to compile and link here.
-define twi_source
+define twi_std_source
 	log.c
 endef
 # List twi_gb source files to compile and link here.
 define twi_gb_source 
 	main.c
-	log.c
 endef
 #========================================================================
 # DO NOT MODIFY ANYTHING BELOW THIS POINT
@@ -16,7 +15,7 @@ endef
 # Build list of sources with full directories from source variables
 # above.
 define src_files := 
-	$(addprefix src/twi/,$(twi_source))
+	$(addprefix src/twi/std/,$(twi_std_source))
 	$(addprefix src/twi/gb/,$(twi_gb_source))
 endef
 
@@ -34,8 +33,8 @@ libs_dir = libs
 
 # Compilation flags
 CFLAGS := -I$(includes_dir) -L$(libs_dir)
-DBG_CFLAGS := -g -DTWI_GB_PROGNAME=\"dtwi-gb\" -DTWI_GB_MAX_LOGS=0
-RLS_CFLAGS := -DTWI_GB_NDEBUG -DTWI_GB_PROGNAME=\"twi-gb\" -DTWI_GB_MAX_LOGS=3
+DBG_CFLAGS := -g -DTWI_GB_PROGNAME=\"dtwi-gb\"
+RLS_CFLAGS := -DTWI_GB_NDEBUG -DTWI_GB_PROGNAME=\"twi-gb\"
 
 # If C compiler isn't set, use default of cc.
 CC ?= cc
