@@ -1,3 +1,9 @@
+//======================================================================
+//======================================================================
+// twi/std/log.c - twi_log source file
+// Written by Serenity Twilight
+//======================================================================
+//======================================================================
 #include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -29,6 +35,13 @@
 			"argument `" #rhs "` (" #lhs " = %" PRIu8 ", " #rhs " = %" PRIu8 ").", \
 			lhs, rhs)
 
+// Basic debugging reporting through stdout.
+#if TWI_LOG_DEBUG
+#	define DEBUGMSG(...) printf(__VA_ARGS__);
+#else
+# define DEBUGMSG(...) ((void)0);
+#endif
+
 //======================================================================
 //======================================================================
 // Type definitions
@@ -44,9 +57,7 @@
 //======================================================================
 enum twi_log_flags {
 	TWI_LOG_FLAG_EPOCH = 0x01,
-	TWI_LOG_FLAG_HAS_STREAM = 0x02,
-	TWI_LOG_FLAG_RECALC_LEVELS = 0x04,
-	TWI_LOG_FLAG_RECALC_HAS_STREAM = 0x08
+	TWI_LOG_FLAG_RECALC_LEVELS = 0x02
 };
 
 //======================================================================
@@ -58,14 +69,17 @@ enum twi_log_flags {
 // Members:
 // * handle: References the output stream owned by this object.
 //   Equal to NULL if this stream object does not own an output stream.
-// * active_levels: Bitmask which identifies the user-defined logging
+// * level_mask: Bitmask which identifies the user-defined logging
 //   levels that will be able to write messages to the output stream
 //   referenced by `handle`.
 //======================================================================
 struct twi_log_stream {
 	FILE* handle;
-	uint32_t active_levels;
+	uint32_t level_mask;
 };
+
+#define DUMP_TWI_LOG_STREAM(stream) \
+	DEBUGMSG("{handle = %p, level_mask = %" PRIu32 "}", (stream).handle, (stream).level_mask)
 
 //======================================================================
 // decl struct twi_log_level
@@ -78,6 +92,36 @@ struct twi_log_level {
 	const char* codes;
 };
 
+#define DUMP_TWI_LOG_LEVEL(lvl) { \
+	const char* name,* nquote,* abbrev,* aquote,* codes,* cquote; \
+	if ((lvl).name != NULL) { \
+		name = (lvl).name; \
+		nquote = "\""; \
+	} else { \
+		name = "NULL"; \
+		nquote = ""; \
+	} \
+	if ((lvl).abbrev != NULL) { \
+		abbrev = (lvl).abbrev; \
+		aquote = "\""; \
+	} else { \
+		abbrev = "NULL"; \
+		aquote = ""; \
+	} \
+	if ((lvl).codes != NULL) { \
+		codes = (lvl).codes; \
+		cquote = "\""; \
+	} else { \
+		codes = "NULL"; \
+		cquote = ""; \
+	} \
+	DEBUGMSG("{name = %s%s%s (%p), abbrev = %s%s%s (%p), codes = %s%s%s (%p)}", \
+			nquote, name, nquote, name, \
+			aquote, abbrev, aquote, abbrev, \
+			cquote, codes, cquote, codes \
+	); \
+}
+
 //======================================================================
 // def struct twi_log_level
 // TODO
@@ -87,11 +131,41 @@ struct twi_log {
 	struct twi_log_level* levels;
 	const char* implicit_path_prefix;
 	struct timespec epoch;
-	uint32_t all_active_levels;
+	uint32_t cumulative_level_mask;
 	uint8_t num_streams;
 	uint8_t num_levels;
 	uint8_t flags;
 };
+
+#define DUMP_TWI_LOG(log) { \
+	DEBUGMSG("{streams = {"); \
+	for (uint_fast8_t s = 0; s < (log).num_streams; ++s) { \
+		DUMP_TWI_LOG_STREAM((log).streams[s]); \
+		if (s + 1 < (log).num_streams) \
+			DEBUGMSG(","); \
+	} \
+	DEBUGMSG("}, levels = "); \
+	for (uint_fast8_t l = 0; l < (log).num_levels; ++l) { \
+		DUMP_TWI_LOG_LEVEL((log).levels[l]); \
+		if (l + 1 < (log).num_levels) \
+			DEBUGMSG(","); \
+	} \
+	const char* prefix,* pquote; \
+	if ((log).implicit_path_prefix != NULL) { \
+		prefix = (log).implicit_path_prefix; \
+		pquote = "\""; \
+	} else { \
+		prefix = "NULL"; \
+		pquote = ""; \
+	} \
+	DEBUGMSG("}, implicit_path_prefix = %s%s%s (%p), " \
+			"epoch = DUMP TO-BE-IMPLEMENTED, " \
+			"cumulative_level_mask = %" PRIu32 ", " \
+			"num_streams = %" PRIu8 ", num_levels = %" PRIu8 ", flags = %" PRIu8 "}", \
+			pquote, prefix, pquote, prefix, (log).cumulative_level_mask, \
+			(log).num_streams, (log).num_levels, (log).flags \
+	); \
+}
 
 //======================================================================
 // def twi_log_errno
@@ -104,27 +178,10 @@ _Thread_local int twi_log_errno;
 // Forward declarations of internal functions.
 //======================================================================
 //======================================================================
-static const char*
-log_level_strshort(enum twi_log_level);
-static size_t
-max_resolved_pathlen(const char*);
-static int
-prepend_log_info(
-		size_t, char[],
-		struct twi_log*,
-		enum twi_log_level,
-		const char*,
-		long,
-		const char*
-);
-static void
-report_stdio_failure(const char*, int);
-static FILE*
-resolve_path(const char*, time_t, uint8_t);
-static int_fast8_t
-rotate_indexed_logs(const char*, const char*, uint8_t);
-static const char*
-trim_prefix(const char*, const char*);
+static uint32_t calculate_level_mask(uint8_t, struct twi_log_level[], const char*);
+static int prepend_log_info(size_t, char[], const struct twi_log*, const char*, long, uint8_t);
+static void report_stdio_failure(const char*, int);
+static const char* trim_prefix(const char*, const char*);
 
 //======================================================================
 //======================================================================
@@ -138,8 +195,9 @@ trim_prefix(const char*, const char*);
 struct twi_log*
 (twi_log_create)(uint8_t num_streams, uint8_t num_levels) {
 	// Validate arguments.
+	twi_assertf(num_streams > 0, "Argument `num_streams` cannot be 0.");
+	twi_assertf(num_levels > 0, "Argument `num_levels` cannot be 0.");
 	twi_assertf(num_levels <= 32, "Argument `num_levels` cannot exceed 32 (num_levels = %" PRIu8 ").", num_levels);
-	// TODO: Deal with num_streams and/or num_levels equaling 0.
 
 	// Measure number of bytes required to fit log.
 	// The number of bytes allocated should account for alignment.
@@ -162,13 +220,13 @@ struct twi_log*
 	}
 
 	// Initialize.
-	log->streams = ((uint8_t*)log) + sizeof(struct twi_log) + streams_padding;
-	log->levels = ((uint8_t*)(log->streams)) + (sizeof(struct twi_log_stream) * num_streams) + levels_padding;
+	log->streams = (struct twi_log_stream*)(((uint8_t*)log) + sizeof(struct twi_log) + streams_padding);
+	log->levels = (struct twi_log_level*)(((uint8_t*)(log->streams)) + (sizeof(struct twi_log_stream) * num_streams) + levels_padding);
 	log->implicit_path_prefix = NULL;
-	log->all_active_levels = 0;
+	log->cumulative_level_mask = 0;
 	log->num_streams = num_streams;
 	log->num_levels = num_levels;
-	if (timespec_get(&(log->epoch), TIME_UTC) != TIME_UTC)
+	if (timespec_get(&(log->epoch), TIME_UTC) == TIME_UTC)
 		log->flags = TWI_LOG_FLAG_EPOCH;
 	else
 		log->flags = 0;
@@ -176,12 +234,12 @@ struct twi_log*
 	// Set streams and levels into default states that identifies them as empty.
 	for (uint_fast8_t i = 0; i < num_streams; ++i) {
 		log->streams[i].handle = NULL;
-		log->streams[i].active_levels = 0;
+		log->streams[i].level_mask = 0;
 	}
 	for (uint_fast8_t i = 0; i < num_levels; ++i) {
 		log->levels[i].name = NULL;
 		log->levels[i].abbrev = NULL;
-		log->levels[i].code = NULL;
+		log->levels[i].codes = NULL;
 	}
 
 	return log;
@@ -194,7 +252,15 @@ void
 (twi_log_delete)(struct twi_log* log) {
 	// Validate arguments.
 	ASSERT_NOTNULL(log);
-	// TODO: Close all streams.
+
+	// Close all outstanding streams, then free the log object.
+	// This is done manually rather than with twi_log_close_stream() to
+	// avoid the overhead incurred in keeping the log object in a valid state
+	// afterwards, which it unnecessary as the log object is being deleted.
+	for (uint_fast16_t s = 0; s < log->num_streams; ++s) {
+		if (log->streams[s].handle != NULL)
+			fclose(log->streams[s].handle);
+	}
 	free(log);
 } // end twi_log_delete()
 
@@ -241,116 +307,11 @@ open_file:
 	if (log->streams[stream_id].handle != NULL)
 		twi_log_close_stream(log, stream_id);
 	log->streams[stream_id].handle = new_handle;
-	twi_log_set_stream_level(log, stream_id, level_codes);
-	log->flags |= TWI_LOG_FLAG_HAS_STREAM;
+	log->streams[stream_id].level_mask = calculate_level_mask(log->num_levels, log->levels, level_codes);
+	log->cumulative_level_mask |= log->streams[stream_id].level_mask;
 
 	return 0;
 } // end twi_log_open_stream()
-
-//======================================================================
-// def twi_log_stream_open_timestamped()
-//======================================================================
-//int_fast8_t
-//twi_log_stream_open_timestamped(
-//		struct twi_log* log,
-//		const char* prefix,
-//		const char* suffix
-//) {
-//	assertf(log != NULL, "Argument `log` points to NULL.");
-//
-//	// Retrieve current timestamp.
-//	errno = 0;
-//	time_t now = time(NULL);
-//	if (now == (time_t)(-1)) {
-//		twi_log_err_libc = "time";
-//		return -1;
-//	}
-//
-//	// Convert timestamp to calendar time.
-//	errno = 0;
-//	struct tm* gmt_now = gmtime(&now);
-//	if (gmt_now == NULL) {
-//		twi_log_err_libc = "gmtime";
-//		return -1;
-//	}
-//
-//	// Construct full pathname in the format of...
-//	// {prefix}{timestamp}{suffix}
-//	size_t remaining = TWI_LOG_PATHNAME_BUFSZ;
-//	char pathname[TWI_LOG_PATHNAME_BUFSZ];
-//	// Concatenate prefix.
-//	if (prefix != NULL) {
-//		size_t prefix_len = strlen(prefix);
-//		if (prefix_len >= remaining)
-//			return 1;
-//		strcpy(pathname, prefix);
-//		remaining -= prefix_len;
-//	}
-//
-//	// Concatenate timestamp.
-//	errno = 0;
-//	int snprintf_status = snprintf(
-//			(pathname + (TWI_LOG_PATHNAME_BUFSZ - remaining)),
-//			remaining,
-//			"%04d-%02d-%02d_%02d;%02d;%02d",
-//			gmt_now->tm_year + 1900,
-//			gmt_now->tm_mon + 1,
-//			gmt_now->tm_mday,
-//			gmt_now->tm_hour,
-//			gmt_now->tm_min,
-//			gmt_now->tm_sec
-//	);
-//
-//	if (snprintf_status < 0) {
-//		twi_log_err_libc = "snprintf";
-//		return -1; // Internal error within snprintf().
-//	} else if (snprintf_status >= remaining)
-//		return 1; // Timestamp could not fit in remaining pathname buffer.
-//	remaining -= snprintf_status;
-//
-//	// Concatenate suffix.
-//	if (suffix != NULL) {
-//		size_t suffix_len = strlen(suffix);
-//		if (suffix_len >= remaining)
-//			return 1;
-//		strcpy(pathname + (TWI_LOG_PATHNAME_BUFSZ - remaining), suffix);
-//	}
-//
-//	return twi_log_stream_open(log, pathname);
-//} // end twi_log_stream_open_timestamped()
-//
-////======================================================================
-//// def twi_log_stream_open_indexed()
-////======================================================================
-//int_fast8_t
-//twi_log_stream_open_indexed(
-//		struct twi_log* log,
-//		const char* prefix,
-//		const char* suffix,
-//		uint8_t max_files
-//) {
-//	assertf(log != NULL, "Argument `log` points to NULL.");
-//	assertf(max_files > 0, "Argument `max_files` must be greater than zero.");
-//
-//	int_fast8_t status = rotate_indexed_logs(prefix, suffix, max_files);
-//	if (status != 0)
-//		return status;
-//
-//	if (prefix == NULL)
-//		prefix = "";
-//	if (suffix == NULL)
-//		suffix = "";
-//	char pathname[TWI_LOG_PATHNAME_BUFSZ];
-//	errno = 0;
-//	int libc_status = snprintf(pathname, TWI_LOG_PATHNAME_BUFSZ,
-//			"%s000%s", prefix, suffix);
-//	if (libc_status < 0) {
-//		twi_log_err_libc = "snprintf";
-//		return -1;
-//	}
-//
-//	return twi_log_stream_open(log, pathname);
-//} // end twi_log_stream_open_indexed()
 
 //======================================================================
 // def twi_log_close_stream()
@@ -365,14 +326,12 @@ void
 	ASSERT_LT_u8(stream_id, log->num_streams);
 
 	if (log->streams[stream_id].handle != NULL) {
-		// TODO: Check for fclose error?
 		fclose(log->streams[stream_id].handle);
 		log->streams[stream_id].handle = NULL;
-		if (log->streams[stream_id].active_levels != 0) {
-			log->streams[stream_id].active_levels = 0;
+		if (log->streams[stream_id].level_mask != 0) {
+			log->streams[stream_id].level_mask = 0;
 			log->flags |= TWI_LOG_FLAG_RECALC_LEVELS;
 		}
-		log->flags |= TWI_LOG_FLAG_RECALC_HAS_STREAM;
 	} // end if user-specified stream is open
 } // end twi_log_close_stream()
 
@@ -388,24 +347,13 @@ void
 	// Validate arguments.
 	ASSERT_NOTNULL(log);
 	ASSERT_LT_u8(stream_id, log->num_streams);
-	if (level_codes == NULL)
-		level_codes = "";
 
-	// Compare characters within the `level_codes` argument to
-	// character codes of registered levels of `log`.
-	// Every time a character match is found, add that level to the
-	// stream's level mask.
-	log->streams[stream_id].active_levels = 0;
-	for (; *level_codes != 0; ++level_codes) {
-		for (uint_fast8_t l = 0; l < log->num_levels; ++l) {
-			for (const char* c = log->levels[l].codes; *c != 0; ++c) {
-				if (*c == *level_codes) {
-					log->streams[stream_id].active_levels |= (1 << l);
-					break; // Level is active, no need to keeping checking its codes.
-				}
-			} // end iteration over codes of a level in `log`
-		} // end iteration over levels in `log`
-	} // end iteration over characters in `level_codes`
+	// Forbid setting level mask if the stream is not open.
+	if (log->streams[stream_id].handle == NULL)
+		return;
+
+	log->streams[stream_id].level_mask
+		= calculate_level_mask(log->num_levels, log->levels, level_codes);
 	log->flags |= TWI_LOG_FLAG_RECALC_LEVELS;
 } // end twi_log_set_stream_level()
 
@@ -472,38 +420,68 @@ const char*
 //=======================================================================
 // def twi_log_write()
 //=======================================================================
-#undef twi_log_write
 void
-twi_log_write(
+(twi_log_write)(
 		struct twi_log* log,
-		enum twi_log_level lvl,
 		const char* fp,
 		long lineno,
+		uint8_t lvl,
 		const char* msg,
 		...
 ) {
-	assertf(log, "`log` points to NULL.");
+	// Validate arguments.
+	ASSERT_NOTNULL(log);
+	ASSERT_LT_u8(lvl, log->num_levels);
+#if TWI_LOG_DEBUG
+	DEBUGMSG("TRACE ->twi_log_write(log = ");
+	DUMP_TWI_LOG(*log);
+	DEBUGMSG(", fp = DON'T CARE, lineno = %ld, lvl = %" PRIu8 ", msg = \"%s\" (%p))\n",
+			lineno, lvl, msg, msg);
+#endif
 
-	// If no output stream is open, do nothing.
-	if (log->stream == NULL)
+	// TODO: Recalculate cumulative_level_mask.
+
+	// If no stream will accept this message,
+	// then it can be discarded without processing.
+	uint32_t lvl_mask = (1 << lvl);
+	DEBUGMSG("lvl_mask = %" PRIu32 "\n", lvl_mask);
+	if (!(log->cumulative_level_mask & lvl_mask))
 		return;
 
-	char buf[BUFSIZ];
-	int status = prepend_log_info(BUFSIZ, buf, log, lvl, fp, lineno, msg);
-	if (status < 0) {
+	// Write the log message prefix (timestamp, level, and invocation location) to a buffer.
+	char buf[2048]; // TODO: Make more versatile against very large logging messages.
+	int status = prepend_log_info(sizeof(buf), buf, log, fp, lineno, lvl);
+	if (status < 0)
 		return; // Formatting failure.
-	}
 
-	// Substitute caller-provided arguments into the caller's message string
-	// and write to the output stream.
+	int offset = status;
+	// Write the user-provided log message to the buffer, after the prefix.
 	va_list caller_args;
 	va_start(caller_args, msg);
 	errno = 0;
-	status = vfprintf(log->stream, buf, caller_args);
+	status = vsnprintf(buf + offset, sizeof(buf) - offset, msg, caller_args);
 	va_end(caller_args);
 	if (status < 0) {
-		report_stdio_failure("vfprintf()", status);
+		report_stdio_failure("vsnprintf()", status);
+		return;
 	}
+
+	offset += status;
+	// Punctuate buffer with newline.
+	if (offset < sizeof(buf))
+		buf[offset] = '\n';
+	else
+		buf[offset-1] = '\n';
+	
+
+	// Copy the buffer contents to all open streams with `lvl` in their mask.
+	for (uint_fast8_t s = 0; s < log->num_streams; ++s) {
+		if (log->streams[s].level_mask & lvl_mask) {
+			status = fputs(buf, log->streams[s].handle);
+			if (status < 0)
+				report_stdio_failure("fputs()", status);
+		}
+	} // end iteration over `log`'s streams.
 } // end twi_log_write()
 
 //======================================================================
@@ -513,120 +491,47 @@ twi_log_write(
 //======================================================================
 
 //=======================================================================
-// decl log_level_strshort()
-// def log_level_strshort()
-//
-// Provides a short-hand abbreviated string equivalent to the provided
-// twi_log_level fit for width-constrained logging output.
-//
-// Parameter:
-// * level - A twi_log_level.
-// Returns:
-// A pointer to a statically allocated, null-terminated character
-// array containing an abbreviated, printable representation of `level`.
+// decl calculate_level_mask()
+// def calculate_level_mask()
+// TODO
 //=======================================================================
-static const char*
-log_level_strshort(enum twi_log_level level) {
-	assertf(level >= TWI_LOG_LEVEL_NONE && level <= TWI_LOG_LEVEL_TRACE,
-			"`level` is not a defined twi_log_level enumeration (%d)", level);
-	switch (level) {
-		case TWI_LOG_LEVEL_NONE: return "00";
-		case TWI_LOG_LEVEL_FATAL: return "FF";
-		case TWI_LOG_LEVEL_ERROR: return "EE";
-		case TWI_LOG_LEVEL_WARN: return "WW";
-		case TWI_LOG_LEVEL_INFO: return "II";
-		case TWI_LOG_LEVEL_DEBUG: return "DD";
-		case TWI_LOG_LEVEL_TRACE: return "TT";
+static uint32_t
+(calculate_level_mask)(
+		uint8_t num_levels,
+		struct twi_log_level levels[num_levels],
+		const char* level_codes
+) {
+	// Validate arguments.
+	ASSERT_NOTNULL(levels);
+#if TWI_LOG_DEBUG
+	DEBUGMSG("TRACE ->calculate_level_mask(num_levels = %" PRIu8 ", levels[] = {", num_levels);
+	for (uint_fast8_t l = 0; l < num_levels; ++l) {
+		DEBUGMSG("{name = \"%s\", abbrev = \"%s\", codes = \"%s\"}%s",
+			levels[l].name, levels[l].abbrev, levels[l].codes, (l + 1 == num_levels ? "" : ","));
 	}
-} // end log_level_strshort()
+	DEBUGMSG("}, level_codes = \"%s\" (%p))\n", level_codes, level_codes);
+#endif
 
-//=======================================================================
-// decl max_resolved_pathlen()
-// def max_resolved_pathlen()
-//
-// Indicates the maximum number of characters that can appear within
-// the provided path after all of its substitution symbols have been
-// fully resolved.
-//
-// If `path` is equal to NULL, behavior is undefined.
-//
-// Parameters:
-// * path:
-// Pointer to a null-terminated character array describing the path
-// to an outstream.
-//
-// Returns:
-// The number of narrow-width characters the provided path can
-// potentially have after all of its substitutions are resolved.
-//=======================================================================
-static size_t
-max_resolved_pathlen(const char* path) {
-	twi_assertf(path, "`path` cannot be NULL.");
-	// Iterate through `path`'s character array.
-	// Upon finding any valid substitution symbols, add the maximum
-	// number of characters added to `increase`, or the minimum number
-	// of characters removed to `decrease`. The final result will be:
-	// length of `path` + increase - decrease
-	size_t increase = 0;
-	size_t decrease = 0;
-	const char* pos;
-	for (pos = path; pos; ++pos) {
-		if (*pos == '%') {
-			// Evaluate the character following the substition character.
-			// If substitution increases the length of `path`, add 
-			// max additional length to `increase`.
-			// If susbtitution decreases the length of `path`, add max
-			// additional length to `decrease`.
-			// NOTE: The substitution-indicating characters will be removed.
-			// The length of the substitution characters (2) should be subtracted from
-			// the increase/decrease of overall path length.
-			++pos;
-			switch(*pos) {
-				case '%': // Escape substitution and use a single percent sign: 1
-					decrease += 1; // (1 - 2 = -1)
-					break;
-				case '@': // Timestamp. YYYY-MM-DDTHH:MM:SS: 19
-					increase += 17; // (19 - 2 = 17)
-					break;
-				case '#': // Index. (000-255): 3
-					increase += 1; // (3 - 2 = 1)
-					break;
-				case 0: // End of string. Terminate loop immediately.
-					goto end;
-			} // end evaluating character following substitution indicator
-		} // end if character is substitution character
-	} // end iteration through `path`
+	if (level_codes == NULL)
+		level_codes = "";
 
-end:
-	return (size_t)(pos - path) + increase - decrease;
-} // end max_resolved_pathlen()
-
-//=======================================================================
-// decl path_subst()
-// def path_subst()
-//
-// Performs substitutions indicated within `path`, and stores the
-// fully resolved string in `dest`.
-//
-// See the description of twi_log_open_stream() for a detailed
-// description of supported path substitutions.
-//
-// If `path` or `dest` are equal to NULL, behavior is undefined.
-//
-// Parameters:
-// * dest:
-// Pointer to the destination to which the contents of `path` are
-// written after all substitutions are resolved.
-// * path:
-// Pointer to a null-terminated character array containing a path to
-// which to open an outstream, which may or may not contain supported
-// substitution instructions.
-// * epoch:
-// Implementation-defined time value that defines the time at which the
-// twi_log was initialized.
-// * max_index:
-//=======================================================================
-
+	// Calculate mask as the bitwise OR of all of the defined levels
+	// which contain at least one character in their code which matches
+	// at least one character in `level_codes`.
+	uint32_t mask = 0;
+	for (; *level_codes != 0; ++level_codes) {
+		for (uint_fast8_t l = 0; l < num_levels; ++l) {
+			for (const char* c = levels[l].codes; *c != 0; ++c) {
+				if (*c == *level_codes) {
+					mask |= (1 << l);
+					break; // Level is now active. Not need to continue checking its codes.
+				}
+			} // end iteration over characters defined in each level's code
+		} // end iteration over each level defined in `levels`
+	} // end iteration over characters in `level_codes`
+	DEBUGMSG("TRACE <-calculate_level_mask(%" PRIu32 ")\n", mask);
+	return mask;
+} // end calculate_level_mask()
 
 //=======================================================================
 // decl prepend_log_info()
@@ -664,48 +569,36 @@ end:
 //   `buf`, including terminating null character.
 // - buf: The character array of at least size `bufsz` to output the
 //   formatted log message information and unformatted message to.
-// - log: Pointer to an initialized twi_log, whose epoch is used to
-//   calculate the timestamp used in the output.
-// - lvl: The logging level of `msg`.
+// - log: Pointer to an initialized twi_log.
 // - fp: Pointer to a null-terminated character array indicating the
-//   filepath of the file which invoked writing to `log`.
-// - lineno: Positive number of the line on which log writing was invoked.
-// - msg: Pointer to a null-terminated character array containing the
-//   caller-provided logging message.
+//   filepath of the file which invoked message logging.
+// - lineno: Line number at which the writing of this message was requested. 
+// - lvl: The logging level which classifies the importance of a message.
 //
 // Returns: The number of character which would be written to buf if
 // bufsz is not heeded, or a negative number on error.
 //=======================================================================
 static int
-prepend_log_info(
+(prepend_log_info)(
 		size_t bufsz, char buf[bufsz],
-		struct twi_log* log,
-		enum twi_log_level lvl,
+		const struct twi_log* log,
 		const char* fp,
 		long lineno,
-		const char* msg
+		uint8_t lvl
 ) {
-	// Argument assertions.
-	assertf(buf != NULL, "`buf` points to NULL.");
-	assertf(log != NULL, "`log` points to NULL.");
-	assertf(lvl != TWI_LOG_LEVEL_NONE,
-			"`lvl` is equal to pseudolevel TWI_LOG_LEVEL_NONE, which should "
-			"be prevented by the TWI_LOG macro.");
-	assertf(lvl <= TWI_LOG_LEVEL_GLOBAL_MAX,
-			"`lvl` exceeds the global maximum logging level definition "
-			"(%s), which should be prevented by the TWI_LOG macro.",
-			log_level_strshort(lvl));
-	assertf(fp != NULL, "`fp` points to NULL.");
-	assertf(lineno > 0, "`lineno` is less than or equal to zero (%ld)", lineno);
-	assertf(msg != NULL, "`msg` points to NULL.");
+	// Validate arguments.
+	ASSERT_NOTNULL(buf);
+	ASSERT_NOTNULL(log);
+	ASSERT_NOTNULL(fp);
+	twi_assertf(lineno > 0, "Argument `lineno` must be greater than 0 (`lineno` = %ld).", lineno);
+	ASSERT_LT_u8(lvl, log->num_levels);
 
-	if (log->implicit_fp != NULL) {
-		fp = trim_prefix(fp, log->implicit_fp);
+	// Trim path prefix, if necessary.
+	if (log->implicit_path_prefix != NULL) {
+		fp = trim_prefix(fp, log->implicit_path_prefix);
 	}
 
-	// If epoch was successfully initialized, get current time so as to
-	// calculate elapsed time. Provide an error string if either the
-	// epoch or the current time failed to initialize.
+	// Calculate timestamp.
 	const char* timestamp_error = NULL;
 	struct timespec now;
 	if (log->flags & TWI_LOG_FLAG_EPOCH) {
@@ -716,29 +609,30 @@ prepend_log_info(
 
 	int status;
 	if (timestamp_error == NULL) {
-		// Now and epoch timestamps available.
 		// Print elapsed time to the microsecond.
 		errno = 0;
 		if ((status = snprintf(buf, bufsz,
-				"[%lld.%06ld] (%s) %s:%ld: %s\n", // [timestamp] (lvl) fp:lineno: msg
+				"[%lld.%06ld] (%s) %s:%ld: ", // [timestamp] (lvl) fp:lineno:
 				((long long)difftime(now.tv_sec, log->epoch.tv_sec)),
 				(now.tv_nsec - log->epoch.tv_nsec) / 1000,
-				log_level_strshort(lvl), fp, lineno, msg
+				log->levels[lvl].abbrev, fp, lineno
 		)) < 0) {
 			report_stdio_failure("snprintf() with timestamp", status);
 		}
 	} else {
-		// Either `now` or epoch timestamps are unavailable.
+		// At least one of the two points in time necessary
+		// to calculate the timestamp is unavailable.
 		// Substitute timestamp with error message.
 		errno = 0;
 		if ((status = snprintf(buf, bufsz,
-				"[%s] (%s) %s:%ld: %s\n", timestamp_error,
-				log_level_strshort(lvl), fp, lineno, msg
+				"[%s] (%s) %s:%ld: ", // [timestamp_error] (lvl) fp:lineno:
+				timestamp_error, log->levels[lvl].abbrev, fp, lineno
 		)) < 0) {
 			report_stdio_failure("snprintf() without timestamp", status);
 		}
 	} // end if/else timestamp aquisition succeeds or fails
 
+	DEBUGMSG("TRACE <-prepend_log_info(%d)\n", status);
 	return status;
 } // end prepend_log_info()
 
@@ -771,7 +665,7 @@ prepend_log_info(
 //   stdio function.
 //=======================================================================
 static void
-report_stdio_failure(const char* identifier, int status) {
+(report_stdio_failure)(const char* identifier, int status) {
 	if (errno) {
 		fprintf(stderr, "twi_log internal error: %s returned %d\n"
 				"\terrno = %d (\"%s\")\n",
@@ -781,154 +675,6 @@ report_stdio_failure(const char* identifier, int status) {
 				"errno = 0\n", identifier, status);
 	}
 } // end report_stdio_failure()
-
-//=======================================================================
-// decl resolve_path()
-// def resolve_path()
-//
-// Returns the appropriate pointer to an open stream as indicated by
-// the null-terminated character string pointed to by `path`. If this
-// function is unable to provide an appropriate stream for the provided
-// path, it will instead return NULL.
-//
-// See the description of twi_log_open_stream() for a detailed
-// description of `path` formatting.
-//
-// If the value of `path` is NULL, behavior is undefined.
-//
-// Parameters:
-// * path:
-// Pointer to a null-terminated character string describing
-// either a path to which to open an stream, or the name of
-// a standard outstream.
-// * epoch:
-// The time at which this log was opened. Used when resolving requests
-// for timestamps.
-// * max_index:
-// The maximum number of output files that will be kept at once when
-// using indexed files. If the creation of a new indexed file would
-// cause the oldest file's index to exceed this value, the oldest file
-// will instead be deleted. The value of this argument has no effect
-// if `path` does not request an index.
-//
-// Returns:
-// Pointer to an outstream appropriate to the value of `path`, or
-// NULL if no such stream can be provided.
-//=======================================================================
-static FILE*
-resolve_path(
-		const char* path,
-		time_t epoch,
-		uint8_t max_index
-) {
-	twi_assertf(path != NULL, "Argument `path` cannot be NULL.");
-
-	// Handle standard outstreams.
-	if (strncmp(path, "std", 3) == 0) {
-		// If the stream path is "stdout", use existing stdout FILE*.
-		// If the stream path is "stderr", use existing stderr FILE*.
-		const char* stdtype = path + 3;
-		if (strcmp(stdtype, "out") == 0)
-			return stdout;
-		else if (strcmp(stdtype, "err") == 0)
-			return stderr;
-	}
-
-	// Perform substitutions on path.
-	char resolved_path[max_resolved_pathlen(path) + 1];
-} // end resolve_path()
-
-//=======================================================================
-// decl rotate_indexed_logs()
-// def rotate_indexed_logs()
-// // TODO: Description.
-//=======================================================================
-int_fast8_t
-rotate_indexed_logs(
-		const char* prefix,
-		const char* suffix,
-		uint8_t max_files
-) {
-	assertf(max_files > 0, "Argument `max_files` must be greater than zero.");
-
-	// Check if prefix and suffix together, along with the 3 index characters
-	// that will be added between them, are less than the maximum buffer size
-	// (accomodating the terminating null byte, of course).
-	size_t prefix_len, suffix_len;
-	if (prefix == NULL) {
-		prefix = "";
-		prefix_len = 0;
-	} else
-		prefix_len = strlen(prefix);
-	if (suffix == NULL) {
-		suffix = "";
-		suffix_len = 0;
-	} else
-		suffix_len = strlen(suffix);
-
-	if (prefix_len + suffix_len + 3 >= TWI_LOG_PATHNAME_BUFSZ)
-		return 1; // Final pathname length exceeds buffer size.
-	
-	// Check for the existence of each file, from index 0 upward.
-	// If a file with an index between 0 and (`max_files` - 1) does not
-	// exist, rotation can begin without exceeding the missing file's
-	// index.
-	uint_fast16_t fileidx;
-	for (fileidx = 0; fileidx < max_files; ++fileidx) {
-		char pathname[TWI_LOG_PATHNAME_BUFSZ];
-		errno = 0;
-		int status = snprintf(pathname, TWI_LOG_PATHNAME_BUFSZ,
-				"%s%03" PRIuFAST16 "%s", prefix, fileidx, suffix);
-		if (status < 0) {
-			twi_log_err_libc = "snprintf";
-			return -1;
-		}
-
-		FILE* tmpfile = fopen(pathname, "r");
-		if (tmpfile != NULL)
-			fclose(tmpfile);
-		else
-			break; // File does not exist, and therefore need not be rotated.
-	}
-
-	// If all indices up to (`max_files` - 1) exist, the file with the
-	// greatest index will be overwritten. Thus, simulate the index of
-	// (`max_files` - 1) having no file by subtracting one from `fileidx`.
-	if (fileidx >= max_files)
-		fileidx -= 1;
-
-	// Now, each file identified to exist before a gap in the index
-	// was discovered must be rotated up one index, until the index returns
-	// to zero.
-	for (; fileidx > 0; --fileidx) {
-		// Construct old pathname.
-		char old_pathname[TWI_LOG_PATHNAME_BUFSZ];
-		errno = 0;
-		int status = snprintf(old_pathname, TWI_LOG_PATHNAME_BUFSZ,
-				"%s%03" PRIuFAST16 "%s", prefix, fileidx - 1, suffix);
-		if (status < 0) {
-			twi_log_err_libc = "snprintf";
-			return -1;
-		}
-		// Construct new pathname.
-		char new_pathname[TWI_LOG_PATHNAME_BUFSZ];
-		errno = 0;
-		status = snprintf(new_pathname, TWI_LOG_PATHNAME_BUFSZ,
-				"%s%03" PRIuFAST16 "%s", prefix, fileidx, suffix);
-		if (status < 0) {
-			twi_log_err_libc = "snprintf";
-			return -1;
-		}
-		// Rename
-		errno = 0;
-		if (rename(old_pathname, new_pathname) != 0) {
-			twi_log_err_libc = "rename";
-			return -1;
-		}
-	}
-
-	return 0;
-} // end rotate_indexed_logs()
 
 //=======================================================================
 // decl trim_prefix()
@@ -959,13 +705,19 @@ rotate_indexed_logs(
 // If not, returns `str`.
 //=======================================================================
 static const char*
-trim_prefix(
+(trim_prefix)(
 		const char* str,
 		const char* prefix
 ) {
-	assertf(str != NULL, "`str` points to NULL.");
-	assertf(prefix != NULL, "`prefix` points to NULL.");
+	// Validate arguments.
+	ASSERT_NOTNULL(str);
+	ASSERT_NOTNULL(prefix);
 
+	// Compare `str` to `prefix`.
+	// If the strings differ before the end of `prefix`,
+	// return a pointer to the beginning of `str`.
+	// Otherwise, return a pointer to the first character of
+	// `str` after the prefix which matches `prefix`.
 	size_t c;
 	for (c = 0; prefix[c]; ++c)
 		if (prefix[c] != str[c]) return str;
