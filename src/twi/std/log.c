@@ -383,7 +383,7 @@ void
 //=======================================================================
 const char*
 (twi_log_get_level_name)(
-		struct twi_log* log,
+		const struct twi_log* log,
 		uint8_t level_id
 ) {
 	ASSERT_NOTNULL(log);
@@ -396,7 +396,7 @@ const char*
 //=======================================================================
 const char*
 (twi_log_get_level_abbrev)(
-		struct twi_log* log,
+		const struct twi_log* log,
 		uint8_t level_id
 ) {
 	ASSERT_NOTNULL(log);
@@ -409,13 +409,25 @@ const char*
 //=======================================================================
 const char*
 (twi_log_get_level_codes)(
-		struct twi_log* log,
+		const struct twi_log* log,
 		uint8_t level_id
 ) {
 	ASSERT_NOTNULL(log);
 	ASSERT_LT_u8(level_id, log->num_levels);
 	return log->levels[level_id].codes;
 } // end twi_log_get_level_codes()
+
+//=======================================================================
+// def twi_log_set_implicit_path_prefix()
+//=======================================================================
+void
+(twi_log_set_implicit_path_prefix)(
+		struct twi_log* log,
+		const char* prefix
+) {
+	ASSERT_NOTNULL(log);
+	log->implicit_path_prefix = prefix;
+} // end twi_log_set_implicit_path_prefix()
 
 //=======================================================================
 // def twi_log_write()
@@ -439,7 +451,13 @@ void
 			lineno, lvl, msg, msg);
 #endif
 
-	// TODO: Recalculate cumulative_level_mask.
+	// Recalculate cumulative_level_mask, if necessary.
+	if (log->flags & TWI_LOG_FLAG_RECALC_LEVELS) {
+		log->cumulative_level_mask = log->streams[0].level_mask;
+		for (uint_fast8_t s = 1; s < log->num_streams; ++s)
+			log->cumulative_level_mask |= log->streams[s].level_mask;
+		log->flags &= ~TWI_LOG_FLAG_RECALC_LEVELS;
+	} // end if the cumulative level mask must be recalculated
 
 	// If no stream will accept this message,
 	// then it can be discarded without processing.
@@ -468,9 +486,10 @@ void
 
 	offset += status;
 	// Punctuate buffer with newline.
-	if (offset < sizeof(buf))
+	if (offset+1 < sizeof(buf)) {
 		buf[offset] = '\n';
-	else
+		buf[offset+1] = 0;
+	} else
 		buf[offset-1] = '\n';
 	
 

@@ -150,7 +150,7 @@ void
 //======================================================================
 const char*
 (twi_log_get_level_name)(
-		struct twi_log* log,
+		const struct twi_log* log,
 		uint8_t level_id
 );
 
@@ -160,7 +160,7 @@ const char*
 //======================================================================
 const char*
 (twi_log_get_level_abbrev)(
-		struct twi_log* log,
+		const struct twi_log* log,
 		uint8_t level_id
 );
 
@@ -170,8 +170,17 @@ const char*
 //======================================================================
 const char*
 (twi_log_get_level_codes)(
-		struct twi_log* log,
+		const struct twi_log* log,
 		uint8_t level_id
+);
+
+//=======================================================================
+// decl twi_log_set_implicit_path_prefix()
+//=======================================================================
+void
+(twi_log_set_implicit_path_prefix)(
+		struct twi_log* log,
+		const char* prefix
 );
 
 //======================================================================
