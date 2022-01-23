@@ -4,102 +4,150 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <twi/std/status.h>
 
 //======================================================================
 // def twi_log_errno
-// TODO
+//
+// Describes the specific reason for failure of the most recent
+// twi_log operation which reported failure on this thread.
 //======================================================================
-extern _Thread_local int twi_log_errno;
+extern _Thread_local enum twi_status twi_log_errno;
 
 //======================================================================
 // decl struct twi_log
-// def struct twi_log
-// TODO: Revise
-//----------------------------------------------------------------------
-// Logging object. Contains references and metadata for formatting
-// and writing log messages.
-//----------------------------------------------------------------------
-// Members:
-//----------------------------------------------------------------------
-// * out (INTERNAL):
-// Output streams to which messages are written.
-//----------------------------------------------------------------------
-// * implicit_path:
-// Implicit pathname prefix omitted from log messages to preserve
-// horizontal space.
 //
-// If implicit_path points to a null-terminated character array,
-// filepaths provided with log messages will have the implicit
-// path truncated from the front of the filepath written into the
-// log if and only if the filepath is prefixed with characters
-// matching all of the characters of the implicit path (excluding
-// null terminator). See examples below for further explanation.
+// An opaque logging structure which represents the inteface between
+// the program utilizing the log and the underlying output streams
+// which accept logging input.
 //
-// If implicit_path points to NULL, this behavior is disabled and all
-// filepaths are written in their entirety to their associated log
-// message.
-//
-// If implicit_path points to anything else, behavior is undefined.
-//
-// Examples:
-// - If the implicit path is "src/", and the filepath is
-//   "src/main.c", the filepath will appear as "main.c" in the log
-//   message.
-// - If the implicit path is "src" and the filepath is
-//   "src/main.c", the filepath will appear as "/main.c" in the log
-//   message.
-// - If the implicit path is "src/a" and the filepath is
-//   "src/main.c", the filepath will appear as "src/main.c" in the
-//   log message.
-// - If the implicit path is "main.c" and the filepath is
-//   "src/main.c", the filepath will appear as "src/main.c" in the
-//   log message.
-//
-// Twi_log will only ever read from the implicit_path variable, never
-// write to it, except during initialization. At initialization,
-// implicit_path is assigned NULL. The value of implicit_path affects
-// how filepath will appear in the output of all open streams associated
-// with the twi_log.
-//----------------------------------------------------------------------
-// * epoch (INTERNAL):
-// Timestamp acquired upon the initialization of the twi_log.
-// Used to derive relative timestamps used in log messages.
-//----------------------------------------------------------------------
-// * active_levels (INTERNAL):
-// A bitmask indicating logging levels which are used by at least one
-// of the twi_log's open streams.
-//
-// For example, if a twi_log holds two open streams, one accepting only
-// TWI_LOG_LEVEL_TRACE and the other accepting only TWI_LOG_LEVEL_INFO,
-// active_levels would be the bitwise OR combination of these two
-// logging levels.
-//
-// This is done to allow for a quick way to discard log messages which
-// will not be written to any held stream before the message undergoes
-// formatting, thus reducing the overhead of ignored messages.
-//----------------------------------------------------------------------
-// * flags (INTERNAL):
-// Internal state flags.
+// All manipulation of a twi_log object available to the user is
+// described in this file. Refer to the file's description for an
+// overview of twi_log features, and individual function descriptions
+// for a more detailed explanation of specific features.
 //======================================================================
 struct twi_log;
 
 //======================================================================
 // decl twi_log_create()
-// TODO
+//
+// Allocates memory for a new twi_log object and initializes it to a
+// default state.
+//
+// Twi_log objects require that the maximum number of usable streams
+// and levels be defined at the time of creation. These counts cannot
+// be changed later without destroying the twi_log object and creating
+// a new one. Not all requested streams/levels must be utilized
+// (it is valid to open fewer streams and/or define fewer levels than
+// the counts requested) and streams/levels can be repurposed and
+// redefined as necessary through the twi_log's lifetime.
+//
+// Arguments:
+// * num_streams:
+// The number of streams to allocate space for within this twi_log.
+// Up to 255 streams can be managed by a single twi_log.
+// It is undefined behavior to request 0 streams.
+//
+// * num_levels:
+// The number of logging levels to allocate space for within this twi_log.
+// Up to 32 logging levels can be defined for a single twi_log.
+// It is undefined behavior to request 0 levels, or greater than 32 levels.
+//
+// Returns:
+// An opaque pointer to the newly allocated and initialized twi_log
+// object, or NULL if the function was unable to allocate sufficient
+// memory. If this function returns NULL, `twi_log_errno` will be set
+// to TWI_STATUS_NOMEM.
 //======================================================================
 struct twi_log*
 (twi_log_create)(uint8_t num_streams, uint8_t num_levels);
 
 //======================================================================
 // decl twi_log_delete()
-// TODO
+//
+// Deinitializes and deallocates a twi_log object.
+//
+// If any streams are still open within the twi_log object when this
+// function is called, they will be closed as if twi_log_close_stream
+// had been called for each individual stream.
+//
+// Arguments:
+// * log:
+// A pointer to a previously initialized twi_log object.
+// It is undefined behavior for `log` to point to NULL, to point to
+// any region of memory that was not returned by `twi_log_create`,
+// or to point to a twi_log which has already been deleted by a previous
+// call to twi_log_delete() (assuming the memory has not been repurposed
+// in the interim by another call to twi_log_create()).
 //======================================================================
 void
 (twi_log_delete)(struct twi_log* log);
 
 //======================================================================
 // decl twi_log_open_stream()
-// TODO
+//
+// Opens a new output stream to be managed by the twi_log object.
+//
+// Streams written to by twi_log can either be standard output streams
+// (stdout/stderr) or files identified by a path. In order to write to
+// standard output streams, the `path` argument should point to a
+// null-terminated character array of either "stdout" or "stderr".
+// All other paths will be assumed to refer to files.
+//
+// If the `stream_id` argument identifies a region within the twi_log
+// which is already managing another open stream, the previous stream
+// will be closed as if by call to twi_log_close_stream() first.
+// See the description of twi_Log_close_stream() for specific details.
+//
+// Please note that this function does not check against currently open
+// streams to ensure that all streams are unique. Therefore, it is
+// possible to open multiple streams in twi_log which refer to the
+// same destination stream. In such cases, the order to writing which
+// occurs is implementation defined, and the final output can be
+// unpredictable.
+//
+// Arguments:
+// * log:
+// Pointer to a twi_log object.
+// It is undefined behavior for `log` to point to NULL, a region of
+// memory not returned by a call to twi_log_create(), or a twi_log
+// which has already been deleted by a call to twi_log_delete().
+//
+// * stream_id:
+// An integral identifier indicating the internal region of memory to
+// contain the stream-to-be-opened. Must be a value from 0 to
+// (the maximum number of streams - 1). It is undefined behavior to
+// supply a `stream_id` outside of these bounds.
+//
+// * path:
+// A pointer to a null-terminated character array identifying the
+// stream to be opened. If `path` is equal to "stdout" or "stderr",
+// the newly opened stream will attach to the existing stdout or stderr
+// standard output stream. Otherwise, a new stream will be opened
+// at the file identified by `path`.
+//
+// * append:
+// Whether or not to clear the previous file referred to by `path`
+// when opening the stream, or begin appending to the end of its
+// existing contents. A value of 0 will wipe out existing file contents,
+// whereas any non-zero value will append to it.
+// Note that this has no effect when `path` is equal to "stdout" or "stderr".
+//
+// * level_codes:
+// A sequence of character codes which define what logging levels will
+// be written to this stream after it has been opened.
+// For each individual character of `level_codes` that matches any
+// one individual character defined within a logging level's codes,
+// that logging level will be enabled.
+// For example, if `level_codes` = "a", all logging levels whose `codes`
+// variable contains at least one 'a' will be made active.
+// If `level_codes` = "abc", all logging levels whose `codes` variable
+// contains at least one 'a', 'b', or 'c' will be made active.
+//
+// Returns:
+// 0 if the new stream was opened successfully, or non-zero otherwise.
+// If this function returns non-zero, twi_log_errno is set to
+// TWI_STATUS_NOSTREAM, and the twi_log object is not modified.
 //======================================================================
 uint_fast8_t
 (twi_log_open_stream)(
@@ -112,7 +160,29 @@ uint_fast8_t
 
 //======================================================================
 // decl twi_log_close_stream()
-// TODO
+//
+// Closes or disassociates from a currently open stream.
+//
+// If the stream referenced by `stream_id` is a standard output stream
+// (stdout or stderr), then it is disassociated from without further
+// modification. The standard output stream will remain open for the
+// greater process. Otherwise, the stream will be closed.
+//
+// If the region of memory referenced by `stream_id` is not currently
+// managing any open stream, then this function does nothing.
+//
+// Arguments:
+// * log:
+// Pointer to a twi_log object.
+// It is undefined behavior for `log` to point to NULL, a region of
+// memory not returned by a call to twi_log_create(), or a twi_log
+// which has already been deleted by a call to twi_log_delete().
+//
+// * stream_id:
+// An integral reference to one of the streams managed by the twi_log.
+// Must be greater than or equal to 0 and less than the maximum number
+// of streams managed by the twi_log, set by the call to twi_log_create().
+// Providing a value outside of this range is undefined behavior.
 //======================================================================
 void
 (twi_log_close_stream)(
@@ -122,7 +192,33 @@ void
 
 //======================================================================
 // decl twi_log_set_stream_level()
-// TODO
+//
+// Redefines the logging levels accepted by a particular stream.
+//
+// Arguments:
+// * log:
+// Pointer to a twi_log object.
+// It is undefined behavior for `log` to point to NULL, a region of
+// memory not returned by a call to twi_log_create(), or a twi_log
+// which has already been deleted by a call to twi_log_delete().
+//
+// * stream_id:
+// An integral reference to one of the streams managed by the twi_log.
+// Must be greater than or equal to 0 and less than the maximum number
+// of streams managed by the twi_log, set by the call to twi_log_create().
+// Providing a value outside of this range is undefined behavior.
+//
+// * level_codes:
+// A sequence of character codes which define what logging levels will
+// be written to this stream after the call to this function has
+// returned.
+// For each individual character of `level_codes` that matches any
+// one individual character defined within a logging level's codes,
+// that logging level will be enabled.
+// For example, if `level_codes` = "a", all logging levels whose `codes`
+// variable contains at least one 'a' will be made active.
+// If `level_codes` = "abc", all logging levels whose `codes` variable
+// contains at least one 'a', 'b', or 'c' will be made active.
 //======================================================================
 void
 (twi_log_set_stream_level)(
@@ -176,6 +272,7 @@ const char*
 
 //=======================================================================
 // decl twi_log_set_implicit_path_prefix()
+// TODO
 //=======================================================================
 void
 (twi_log_set_implicit_path_prefix)(
@@ -228,8 +325,7 @@ void
 void
 (twi_log_write)(
 		struct twi_log* log,
-		const char* fp,
-		long lineno,
+		const char*, long, // Ignore these. Internal variables.
 		uint8_t lvl,
 		const char* msg,
 		...

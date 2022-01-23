@@ -258,7 +258,9 @@ void
 	// avoid the overhead incurred in keeping the log object in a valid state
 	// afterwards, which it unnecessary as the log object is being deleted.
 	for (uint_fast16_t s = 0; s < log->num_streams; ++s) {
-		if (log->streams[s].handle != NULL)
+		if (log->streams[s].handle != NULL
+		 && log->streams[s].handle != stdout
+		 && log->streams[s].handle != stderr)
 			fclose(log->streams[s].handle);
 	}
 	free(log);
@@ -326,7 +328,11 @@ void
 	ASSERT_LT_u8(stream_id, log->num_streams);
 
 	if (log->streams[stream_id].handle != NULL) {
-		fclose(log->streams[stream_id].handle);
+		// DO NOT CLOSE STANDARD OUTPUT STREAMS!
+		// Simply disassociate from them.
+		if (log->streams[stream_id].handle != stdout
+		 && log->streams[stream_id].handle != stderr)
+			fclose(log->streams[stream_id].handle);
 		log->streams[stream_id].handle = NULL;
 		if (log->streams[stream_id].level_mask != 0) {
 			log->streams[stream_id].level_mask = 0;
