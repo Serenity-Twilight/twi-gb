@@ -16,7 +16,7 @@
 #include <string.h>
 #include <time.h>
 
-#include <twi/std/assertf.h>
+#include <twi/std/assert.h>
 #include <twi/std/log.h>
 #include <twi/std/status.h>
 
@@ -27,8 +27,6 @@
 //======================================================================
 // The following are macros that define argument assertions which are
 // used at multiple locations throughout this file.
-#define ASSERT_NOTNULL(ptr) \
-	twi_assertf(ptr != NULL, "Argument `" #ptr "` cannot be NULL.")
 #define ASSERT_LT_u8(lhs, rhs) \
 	twi_assertf(lhs < rhs, \
 			"Value of argument `" #lhs "` must be less than the value of " \
@@ -308,7 +306,7 @@ struct twi_log*
 void
 (twi_log_delete)(struct twi_log* log) {
 	// Validate arguments.
-	ASSERT_NOTNULL(log);
+	twi_assert_notnull(log);
 
 	// Close all outstanding streams, then free the log object.
 	// This is done manually rather than with twi_log_close_stream() to
@@ -335,9 +333,9 @@ uint_fast8_t
 		const char* level_codes
 ) {
 	// Validate arguments.
-	ASSERT_NOTNULL(log);
+	twi_assert_notnull(log);
 	ASSERT_LT_u8(stream_id, log->num_streams);
-	ASSERT_NOTNULL(path);
+	twi_assert_notnull(path);
 
 	// Access stream.
 	FILE* new_handle;
@@ -381,7 +379,7 @@ void
 		uint8_t stream_id
 ) {
 	// Validate arguments.
-	ASSERT_NOTNULL(log);
+	twi_assert_notnull(log);
 	ASSERT_LT_u8(stream_id, log->num_streams);
 
 	if (log->streams[stream_id].handle != NULL) {
@@ -408,7 +406,7 @@ void
 		const char* level_codes
 ) {
 	// Validate arguments.
-	ASSERT_NOTNULL(log);
+	twi_assert_notnull(log);
 	ASSERT_LT_u8(stream_id, log->num_streams);
 
 	// Forbid setting level mask if the stream is not open.
@@ -432,7 +430,7 @@ void
 		const char* codes
 ) {
 	// Validate arguments.
-	ASSERT_NOTNULL(log);
+	twi_assert_notnull(log);
 	ASSERT_LT_u8(level_id, log->num_levels);
 
 	// Overwrite.
@@ -449,7 +447,7 @@ const char*
 		const struct twi_log* log,
 		uint8_t level_id
 ) {
-	ASSERT_NOTNULL(log);
+	twi_assert_notnull(log);
 	ASSERT_LT_u8(level_id, log->num_levels);
 	return log->levels[level_id].name;
 } // end twi_log_get_level_name()
@@ -462,7 +460,7 @@ const char*
 		const struct twi_log* log,
 		uint8_t level_id
 ) {
-	ASSERT_NOTNULL(log);
+	twi_assert_notnull(log);
 	ASSERT_LT_u8(level_id, log->num_levels);
 	return log->levels[level_id].abbrev;
 } // end twi_log_get_level_abbrev()
@@ -475,7 +473,7 @@ const char*
 		const struct twi_log* log,
 		uint8_t level_id
 ) {
-	ASSERT_NOTNULL(log);
+	twi_assert_notnull(log);
 	ASSERT_LT_u8(level_id, log->num_levels);
 	return log->levels[level_id].codes;
 } // end twi_log_get_level_codes()
@@ -488,7 +486,7 @@ void
 		struct twi_log* log,
 		const char* prefix
 ) {
-	ASSERT_NOTNULL(log);
+	twi_assert_notnull(log);
 	log->implicit_path_prefix = prefix;
 } // end twi_log_set_implicit_path_prefix()
 
@@ -505,7 +503,7 @@ void
 		...
 ) {
 	// Validate arguments.
-	ASSERT_NOTNULL(log);
+	twi_assert_notnull(log);
 	ASSERT_LT_u8(lvl, log->num_levels);
 #if TWI_LOG_DEBUG
 	DEBUGMSG("TRACE ->twi_log_write(log = ");
@@ -601,7 +599,7 @@ static uint32_t
 		const char* level_codes
 ) {
 	// Validate arguments.
-	ASSERT_NOTNULL(levels);
+	twi_assert_notnull(levels);
 #if TWI_LOG_DEBUG
 	DEBUGMSG("TRACE ->calculate_level_mask(num_levels = %" PRIu8 ", levels[] = {", num_levels);
 	for (uint_fast8_t l = 0; l < num_levels; ++l) {
@@ -670,9 +668,9 @@ static int
 		uint8_t lvl
 ) {
 	// Validate arguments.
-	ASSERT_NOTNULL(buf);
-	ASSERT_NOTNULL(log);
-	ASSERT_NOTNULL(fp);
+	twi_assert_notnull(buf);
+	twi_assert_notnull(log);
+	twi_assert_notnull(fp);
 	twi_assertf(lineno > 0, "Argument `lineno` must be greater than 0 (`lineno` = %ld).", lineno);
 	ASSERT_LT_u8(lvl, log->num_levels);
 
@@ -794,8 +792,8 @@ static const char*
 		const char* prefix
 ) {
 	// Validate arguments.
-	ASSERT_NOTNULL(str);
-	ASSERT_NOTNULL(prefix);
+	twi_assert_notnull(str);
+	twi_assert_notnull(prefix);
 
 	// Compare `str` to `prefix`.
 	// If the strings differ before the end of `prefix`,
