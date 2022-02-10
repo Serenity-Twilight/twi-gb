@@ -1,26 +1,18 @@
-#include <stdlib.h>
+#include <errno.h>
+#include <string.h>
+#include <stdio.h>
 
+#include <twi/std/assert.h>
 #include <twi/gb/log.h>
 
 int main(int argc, char* argv[]) {
-	if (twi_gb_stdlog_init(TWI_LOG_LEVEL_GLOBAL_MAX, TWI_GB_PROGNAME, "log", TWI_GB_MAX_LOGS))
-		return EXIT_FAILURE;
-
-	setvbuf(twi_gb_stdlog.stream, NULL, _IONBF, 0);
-	
-	int subst_int = 500;
-	const char* subst_str = "This is dynamically written! Wow!";
-	LOGD("TWI_GB_PROGNAME = " TWI_GB_PROGNAME);
-	LOGE("TWI_LOG_LEVEL_TRACE = %d, TWI_LOG_LEVEL_GLOBAL_MAX = %d",
-			TWI_LOG_LEVEL_TRACE, TWI_LOG_LEVEL_GLOBAL_MAX);
-	LOGF("This is a logging message with level FATAL. No substitutions.");
-	LOGE("This is a logging message with level ERROR. No substitutions.");
-	LOGW("This is a logging message with level WARN. No substitutions.");
-	LOGI("This is a logging message with level INFO. No substitutions.");
-	LOGD("This is a logging message with level DEBUG. No substitutions.");
-	LOGT("This is a logging message with level TRACE. No substitutions.");
-	LOGT("Substitutions:\nint = %d\nstr = %s", subst_int, subst_str);
-
-	twi_gb_stdlog_destroy();
-	return EXIT_SUCCESS;
+	twi_gb_log_create();
+//	LOGF("This is a fatal message, id = %d", TWI_GB_LOG_LEVEL_FATAL);
+//	LOGE("This is an error message, id = %d", TWI_GB_LOG_LEVEL_ERROR);
+//	LOGW("This is a warning message, id = %d", TWI_GB_LOG_LEVEL_WARN);
+//	LOGI("This is an informational message, id = %d", TWI_GB_LOG_LEVEL_INFO);
+//	LOGD("This is a debug message, id = %d", TWI_GB_LOG_LEVEL_DEBUG);
+//	LOGT("This is a trace message, id = %d", TWI_GB_LOG_LEVEL_TRACE);
+//	LOGR("This is a rom error message, id = %d", TWI_GB_LOG_LEVEL_ROMERR);
+	twi_gb_log_delete();
 }
