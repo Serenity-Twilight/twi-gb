@@ -53,7 +53,15 @@
 // def enum twi_log_flags
 //
 // Defines flag bits for the twi_log.flags variable.
-// TODO: Improve and complete documenation.
+//----------------------------------------------------------------------
+// * TWI_LOG_FLAG_EPOCH:
+// Set if the epoch was successfully set at the creation of the log, or
+// cleared otherwise.
+//
+// * TWI_LOG_FLAG_RECALC_LEVELS:
+// Set if the cumulative level mask of a level is desynchronized from
+// the individual level masks of the streams it owns, and therefore
+// must be recalculated with a potentially non-trivial operation.
 //======================================================================
 enum twi_log_flags {
 	TWI_LOG_FLAG_EPOCH = 0x01,
@@ -65,7 +73,7 @@ enum twi_log_flags {
 // def struct twi_log_stream
 //
 // Internal structure for management of log output streams.
-//
+//----------------------------------------------------------------------
 // Members:
 // * handle: References the output stream owned by this object.
 //   Equal to NULL if this stream object does not own an output stream.
@@ -84,7 +92,23 @@ struct twi_log_stream {
 //======================================================================
 // decl struct twi_log_level
 // def struct twi_log_level
-// TODO
+//
+// Information describing a logging level.
+// All members of this struct point to memory managed by the log's
+// user, and therefore cannot be modified.
+//
+// See the description above the declaration of `twi_log_define_level()`
+// for more details regarding the restrictions of these struct members.
+//----------------------------------------------------------------------
+// Members:
+// * name:
+// The human-readable name which designates a logging level.
+//
+// * abbrev:
+// The shorthand abbreviation which designates a logging level.
+//
+// * codes:
+// The character codes which may be used to enable a logging level.
 //======================================================================
 struct twi_log_level {
 	const char* name;
@@ -123,8 +147,42 @@ struct twi_log_level {
 }
 
 //======================================================================
-// def struct twi_log_level
-// TODO
+// def struct twi_log
+//
+// The primary log management object.
+//----------------------------------------------------------------------
+// Members:
+// * streams:
+// Pointer to an array of size `num_streams` containing all of the
+// output streams that a log is capable of maintaining simultaneously.
+//
+// * levels:
+// Pointer to an array of size `num_levels` containing all of the
+// user-defined logging levels that this log is capable of maintaining
+// simultaneously.
+//
+// * implicit_path_prefix:
+// A filepath prefix which, if matched with the start of a filepath
+// used in a logging message, is truncated from the start of the
+// filepath printed in the log message.
+//
+// * epoch:
+// The timestamp of when a particular log instance is created.
+//
+// * cumulative_level_mask:
+// A bitwise combination of the level_masks of all of a log's open
+// streams.
+//
+// * num_streams:
+// The maximum number of streams that a log can manage at once.
+//
+// * num_levels:
+// The maximum number of user-defined logging levels that a log can
+// manage at once.
+//
+// * flags:
+// Internal flags used for tracking log state.
+// See the definition of `enum twi_log_flags` for more details.
 //======================================================================
 struct twi_log {
 	struct twi_log_stream* streams;
@@ -169,9 +227,8 @@ struct twi_log {
 
 //======================================================================
 // def twi_log_errno
-// TODO
 //======================================================================
-_Thread_local int twi_log_errno;
+_Thread_local enum twi_status twi_log_errno;
 
 //======================================================================
 //======================================================================
@@ -296,7 +353,7 @@ uint_fast8_t
 			goto open_file;
 	} else {
 open_file:
-		// TODO: Handle creation of new directories.
+		// FIXME: Handle creation of new directories.
 		errno = 0;
 		new_handle = fopen(path, (append ? "a" : "w"));
 		if (new_handle == NULL) {
@@ -473,7 +530,7 @@ void
 		return;
 
 	// Write the log message prefix (timestamp, level, and invocation location) to a buffer.
-	char buf[2048]; // TODO: Make more versatile against very large logging messages.
+	char buf[2048]; // FIXME: Make more versatile against very large logging messages.
 	int status = prepend_log_info(sizeof(buf), buf, log, fp, lineno, lvl);
 	if (status < 0)
 		return; // Formatting failure.
@@ -518,7 +575,24 @@ void
 //=======================================================================
 // decl calculate_level_mask()
 // def calculate_level_mask()
-// TODO
+//
+// Converts a collection of 1-character level codes into a bitmask
+// with bits of equivalent levels found in `level_codes` set.
+//-----------------------------------------------------------------------
+// Parameters:
+// * num_levels:
+// The number of levels defined in `levels`. Behavior is undefined if
+// this value is greater than the total number of levels in `levels`.
+//
+// * levels:
+// The level definitions to compare against the contents of `level_codes`.
+//
+// * level_codes:
+// The set of 1-character level codes to convert into a bitmask.
+//-----------------------------------------------------------------------
+// Returns:
+// The bitmask equivalent of `level_codes` when adhering to the
+// definitions contained within `levels`.
 //=======================================================================
 static uint32_t
 (calculate_level_mask)(
@@ -562,46 +636,30 @@ static uint32_t
 // decl prepend_log_info()
 // def prepend_log_info()
 //
-// Prepends standard formatted log message information to the log
-// message `msg`, and stores the result in `buf` up to a maximum of
-// `bufsz` - 1 characters, followed by a null byte.
+// Prepends log message metadata to `buf`.
 //
 // The standard log message format is as follows:
-// [timestamp] (lvl):fp:lineno: msg
+// [seconds.microseconds] (lvl):fp:lineno:(space)
 //
-// The timestamp format is defined as follows:
-// [days:hours:minutes:seconds:microseconds]
-// The number of days is excluded, along with the colon following it,
-// if less than one day has passed since the initialization of `log`.
-//
-// The number of hours, minutes, and seconds are each zero-padded to
-// be exactly 2 characters wide, and microseconds zero-padded to be
-// exactly 6 characters wide, to improve readibility via consistent
-// horizontal alignment of log messages. The day counter, if present,
-// has no minimum or maximum width.
-//
-// `lvl` is formatted via log_level_strshort().
-//
-// The filepath pointed to by `fp` will have the implicit_fp,
-// defined by `log`, trimmed off its front if present before writing
-// it to `buf`.
-//
-// No substitutions are performed on the contents of `msg` when
-// prepending standard log message information to it.
-//
+// The metadata is suffixed with a space to simplify appending the
+// formatted log message afterwards.
+//-----------------------------------------------------------------------
 // Parameters:
-// - bufsz: The maximum number of characters allowed to be written to
-//   `buf`, including terminating null character.
-// - buf: The character array of at least size `bufsz` to output the
-//   formatted log message information and unformatted message to.
-// - log: Pointer to an initialized twi_log.
-// - fp: Pointer to a null-terminated character array indicating the
-//   filepath of the file which invoked message logging.
-// - lineno: Line number at which the writing of this message was requested. 
-// - lvl: The logging level which classifies the importance of a message.
-//
-// Returns: The number of character which would be written to buf if
-// bufsz is not heeded, or a negative number on error.
+// * bufsz: The maximum number of bytes allowed to be written to `buf`,
+//   including the terminating null byte.
+// * buf: The character array of at least size `bufsz` to output the log
+//   message metadata to. Behavior is undefined if `buf` is NULL or not at
+//   least `bufsz` in length.
+// * log: A twi_log returned by a call to `twi_log_create()` that has yet to
+//   be destroyed by a call to `twi_log_delete()`. Providing any other
+//   value results in undefined behavior.
+// * fp: The filepath to the file from which the log is being invoked.
+// * lineno: The line number of the file from where the log is being invoked.
+// * lvl: The logging level denoting the classification of the log message.
+//-----------------------------------------------------------------------
+// Returns:
+// The number of characters which would be written to buf if bufsz is
+// not heeded, or a negative number on error.
 //=======================================================================
 static int
 (prepend_log_info)(
@@ -682,12 +740,13 @@ static int
 // In such case, there's no more that can be reasonably done to report
 // the error, and as such this function does not return any status to
 // indicate success or failure.
-//
+//-----------------------------------------------------------------------
 // Parameters:
-// - identifier: Pointer to a character array whose contents provide
-//   an adequate description of the stdio usage which failed.
-// - status: Integral status indicator returned by the offending
-//   stdio function.
+// * identifier: An adequate description of the cstdlib operation that
+//   failed (often a function name is fine, but further disambiguation
+//   may be necessary in some cases).
+// * status: Integral status indicator returned by the offending stdio
+//   function.
 //=======================================================================
 static void
 (report_stdio_failure)(const char* identifier, int status) {
@@ -717,12 +776,12 @@ static void
 // Under no circumstances are any strings modified by this function.
 // If `str` points to the start of dynamically allocated memory,
 // ensure that the original pointer is used for deallocation.
-//
+//-----------------------------------------------------------------------
 // Parameters:
-// - str: Pointer to a null-terminated character array.
-// - prefix: Pointer to a null-terminated character array representing
+// * str: Pointer to a null-terminated character array.
+// * prefix: Pointer to a null-terminated character array representing
 //   the prefix to trim from the start of `str`, if present.
-//
+//-----------------------------------------------------------------------
 // Returns:
 // (str + strlen(prefix)) if the start of the character array
 // pointed to by `str` matches the entire character array
