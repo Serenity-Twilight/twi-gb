@@ -1,10 +1,13 @@
+//=======================================================================
+//=======================================================================
+// TODO
+// Written by Serenity Twilight
+//=======================================================================
+//=======================================================================
 #ifndef TWI_GB_LOG_H
 #define TWI_GB_LOG_H
 
-// TODO: Functionality to disable specific logging levels at compile
-// time, thereby eliminating the performance overhead of checking
-// for unused levels.
-
+#include <stddef.h>
 #include <stdint.h>
 #include <twi/std/log.h>
 
@@ -81,15 +84,64 @@ extern struct twi_log* twi_gb_log;
 
 // Macros which simplify the callsite signature of log writes for
 // programmer convenience.
-#define LOG(lvl, msg, ...) \
+#if TWI_GB_NOLOG
+#	define LOG(...) ((void)0)
+#else
+# define LOG(lvl, msg, ...) \
 	if (twi_gb_log != NULL) {twi_log_write(twi_gb_log, lvl, msg, ##__VA_ARGS__)}
-#define LOGF(msg, ...) LOG(TWI_GB_LOG_LEVEL_FATAL, msg, ##__VA_ARGS__)
-#define LOGE(msg, ...) LOG(TWI_GB_LOG_LEVEL_ERROR, msg, ##__VA_ARGS__)
-#define LOGW(msg, ...) LOG(TWI_GB_LOG_LEVEL_WARN, msg, ##__VA_ARGS__)
-#define LOGI(msg, ...) LOG(TWI_GB_LOG_LEVEL_INFO, msg, ##__VA_ARGS__)
-#define LOGD(msg, ...) LOG(TWI_GB_LOG_LEVEL_DEBUG, msg, ##__VA_ARGS__)
-#define LOGT(msg, ...) LOG(TWI_GB_LOG_LEVEL_TRACE, msg, ##__VA_ARGS__)
-#define LOGR(msg, ...) LOG(TWI_GB_LOG_LEVEL_ROMERR, msg, ##__VA_ARGS__)
+#endif // end TWI_GB_NOLOG
+
+#if TWI_GB_LOG_NOFATAL
+#	define LOGF(...) ((void)0)
+#else
+#	define LOGF(msg, ...) LOG(TWI_GB_LOG_LEVEL_FATAL, msg, ##__VA_ARGS__)
+#endif // TWI_GB_LOG_NOFATAL
+
+#if TWI_GB_LOG_NOERROR
+#	define LOGE(...) ((void)0)
+#else
+# define LOGE(msg, ...) LOG(TWI_GB_LOG_LEVEL_ERROR, msg, ##__VA_ARGS__)
+#endif // TWI_GB_LOG_NOERROR
+
+#if TWI_GB_LOG_NOWARN
+#	define LOGW(...) ((void)0)
+#else
+#	define LOGW(msg, ...) LOG(TWI_GB_LOG_LEVEL_WARN, msg, ##__VA_ARGS__)
+#endif // TWI_GB_LOG_NOWARN
+
+#if TWI_GB_LOG_NOINFO
+#	define LOGI(...) ((void)0)
+#else
+#	define LOGI(msg, ...) LOG(TWI_GB_LOG_LEVEL_INFO, msg, ##__VA_ARGS__)
+#endif // TWI_GB_LOG_NOINFO
+
+#if TWI_GB_LOG_NODEBUG
+#	define LOGD(...) ((void)0)
+#else
+#	define LOGD(msg, ...) LOG(TWI_GB_LOG_LEVEL_DEBUG, msg, ##__VA_ARGS__)
+#endif // TWI_GB_LOG_NODEBUG
+
+#if TWI_GB_LOG_NOTRACE
+#	define LOGT(...) ((void)0)
+#else
+#	define LOGT(msg, ...) LOG(TWI_GB_LOG_LEVEL_TRACE, msg, ##__VA_ARGS__)
+#endif // TWI_GB_LOG_NOTRACE
+
+#if TWI_GB_LOG_NOROMERR
+#	define LOGR(...) ((void)0)
+#else
+#	define LOGR(msg, ...) LOG(TWI_GB_LOG_LEVEL_ROMERR, msg, ##__VA_ARGS__)
+#endif // TWI_GB_LOG_NOROMERR
+
+//=======================================================================
+// Assertions in twi-gb use a custom handler to write assertions to
+// the global log, as well as to close the log before terminating.
+//=======================================================================
+#undef TWI_ASSERT_MSG_HANDLER // Silence compiler warning of macro redefinition.
+#define TWI_ASSERT_MSG_HANDLER(msg, ...) { \
+	LOGF("Assertion failure " msg, ##__VA_ARGS__); \
+	twi_gb_log_delete(); \
+}
 
 uint_fast8_t twi_gb_log_create();
 void twi_gb_log_delete();
