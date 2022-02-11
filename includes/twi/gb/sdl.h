@@ -1,0 +1,75 @@
+//=======================================================================
+//=======================================================================
+// TODO: Description
+// Written by Serenity Twilight
+//=======================================================================
+//=======================================================================
+#ifndef TWI_GB_SDL_H
+#define TWI_GB_SDL_H
+
+#include <stdint.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_video.h>
+
+//=======================================================================
+// decl struct twi_gb_sdl
+// def struct twi_gb_sdl
+//
+// Container for handles to SDL objects used for interfacing with
+// the user's system.
+//-----------------------------------------------------------------------
+// Members: TODO
+//=======================================================================
+struct twi_gb_sdl {
+	SDL_Window* window;
+	SDL_Renderer* renderer;
+	SDL_Texture* texture;
+};
+
+//=======================================================================
+// decl twi_gb_sdl_init()
+//
+// Initializes the SDL subsystems to be used by twi-gb, and creates
+// the necessary SDL objects, which have their pointers stored within
+// the appropriate variables in the argument `sdl`.
+//-----------------------------------------------------------------------
+// Parameters:
+// * sdl: A destination where the pointers to the allocated SDL objects
+//   will be stored. Note that any values previously contained at
+//   `sdl` will be overwritten.
+//-----------------------------------------------------------------------
+// Returns: 0 on success, or non-0 on failure.
+// TODO: Global error flag for twi-gb to indicate error?
+//=======================================================================
+uint_fast8_t
+twi_gb_sdl_init(struct twi_gb_sdl* sdl);
+
+//=======================================================================
+// decl twi_gb_sdl_destroy()
+//
+// Destroys and deallocates the SDL objects referenced within `sdl`
+// and prepares SQL for process termination.
+//-----------------------------------------------------------------------
+// Parameters:
+// * sdl: A container of SQL objects to destroy prior to shutdown
+//   of SQL subsystems.
+//=======================================================================
+void
+twi_gb_sdl_destroy(struct twi_gb_sdl* sdl);
+
+//=======================================================================
+// decl twi_gb_sdl_draw()
+// TODO
+//=======================================================================
+void
+twi_gb_sdl_draw(struct twi_gb_sdl* sdl);
+
+//=======================================================================
+// decl twi_gb_sdl_draw()
+// TODO
+//=======================================================================
+void
+twi_gb_sdl_draw_test(struct twi_gb_sdl* sdl);
+
+#endif // TWI_GB_SDL_H
+
