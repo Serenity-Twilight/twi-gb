@@ -7,6 +7,7 @@ endef
 define twi_gb_source 
 	log.c
 	main.c
+	mem.c
 	sdl.c
 endef
 #========================================================================
