@@ -1,7 +1,21 @@
 //=======================================================================
 //-----------------------------------------------------------------------
-// src/twi/gb/lcd.c
-// Written by Serenity Twilight
+// Copyright 2022 Serenity Twilight
+//
+// This file is part of twi-gb.
+//
+// twi-gb is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// twi-gb is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+// See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with twi-gb. If not, see <https://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------
 //=======================================================================
 #include <stdint.h>
@@ -100,18 +114,7 @@ twi_gb_lcd_draw(
 	uint8_t palettes[3]; // 0: BG palette, 1: OBJ0 palette, 2: OBJ1 palette
 	get_palette_data(palettes, mem_ctl, mode);
 
-	// Draw the background, up to the top edge of the window, if it's enabled.
-	// If the window isn't enabled, then the entire onscreen background is
-	// drawn.
-	const uint8_t* mem_codes;
-	uint8_t stopat;
-	if (mem_ctl[TWI_GB_MEM_CTL_LCDC] & WINDISPLAY) // is the window enabled?
-		stopat = mem_ctl[TWI_GB_MEM_CTL_WY]; // Stop at the y position.
-	else
-		stopat = px_height; // Draw entire background.
-	
-	for (
-
+	// TODO: Call draw_bg()
 } // end twi_gb_lcd_draw()
 
 //=======================================================================
