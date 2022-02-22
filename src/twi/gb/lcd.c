@@ -65,9 +65,12 @@
 #define OBJCODE 2
 #define OBJATRB 3
 
-// Screen dimensions
-#define SCRWIDTH 160 // pixels wide
-#define SCRHEIGHT 144 // pixels tall
+// LCD screen dimensions (in pixels)
+#define SCR_WIDTH 160
+#define SCR_HEIGHT 144
+
+// System-defined color codes
+#define COLOR_WHITE 0xFFFFFFFF
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -166,13 +169,30 @@ compare_objs_dmg(const void* lobj, const void* robj) {
 //=======================================================================
 static void
 draw_bg(
-		uint32_t* pixels,
-		const uint32_t* colors,
-		const uint8_t* palettes,
+		uint32_t* dest,
+		const uint32_t[][4] palettes,
 		const uint8_t* vram0,
 		const uint8_t* vram1,
-		const uint8_t* ctl,
+		uint8_t lcdc,
+		uint8_t start_line,
+		uint8_t num_lines
 ) {
+	// Assert arguments' validity.
+	twi_assert_notnull(dest);
+	twi_assert_notnull(palettes); // Decays to pointer.
+	twi_assert_notnull(vram0);
+	twi_assert_lti(start_line, SCR_HEIGHT);
+	uint8_t end_line = start_line + num_lines;
+	twi_assert_lteqi(end_line, SCR_HEIGHT);
+
+	// If background is disabled by LCD controller, draw white to all
+	// pixels of all lines to be drawn to.
+	if (!(lcdc & BGDISPLAY)) {
+		uint_fast16_t end_index = end_line * SCR_WIDTH;
+		for (uint_fast16_t i = start_line * SCR_WIDTH; i < end_index; ++i)
+			dest[i] = COLOR_WHITE;
+		return;
+	} // end if background is disabled.
 } // end draw_bg()
 
 //=======================================================================
