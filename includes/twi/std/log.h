@@ -511,7 +511,7 @@ void
 // sequenuence of substitution pattern present in `msg`.
 //======================================================================
 #define twi_log_write(logptr, lvl, ...) \
-	twi_log_write(logptr, __FILE__, __LINE__, lvl, __VA_ARGS__);
+	twi_log_write(logptr, __FILE__, __LINE__, lvl, __VA_ARGS__)
 void
 (twi_log_write)(
 		struct twi_log* log,

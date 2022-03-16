@@ -53,7 +53,7 @@ twi_gb_sdlvid_get_drawing_area(struct twi_gb_sdlvid* vid);
 //
 // TODO
 //=======================================================================
-uint32_t*
+uint_fast8_t
 twi_gb_sdlvid_draw(struct twi_gb_sdlvid* vid);
 
 //=======================================================================

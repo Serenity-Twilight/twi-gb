@@ -88,7 +88,7 @@ extern struct twi_log* twi_gb_log;
 #	define LOG(...) ((void)0)
 #else
 # define LOG(lvl, msg, ...) \
-	if (twi_gb_log != NULL) {twi_log_write(twi_gb_log, lvl, msg, ##__VA_ARGS__)}
+	if (twi_gb_log != NULL) twi_log_write(twi_gb_log, lvl, msg, ##__VA_ARGS__)
 #endif // end TWI_GB_NOLOG
 
 #if TWI_GB_LOG_NOFATAL

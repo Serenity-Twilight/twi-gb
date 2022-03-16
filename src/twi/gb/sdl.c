@@ -123,7 +123,7 @@ twi_gb_sdlvid_get_drawing_area(struct twi_gb_sdlvid* vid) {
 		// 32-bit alignment allows for a pixel's color to be set with a
 		// single instruction, as opposed to four, and thus is quite a bit
 		// faster.
-		if ((uint8_t*)(vid->pixels) % sizeof(uint32_t) != 0)
+		if ((uintptr_t)(vid->pixels) % sizeof(uint32_t) != 0)
 			LOGW("Texture pixel destination is NOT aligned for 32-bit access (%p)!", vid->pixels);
 		else
 			LOGD("Texture pixel destination is aligned for 32-bit access (%p).", vid->pixels);
@@ -150,13 +150,13 @@ twi_gb_sdlvid_draw(struct twi_gb_sdlvid* vid) {
 	SDL_UnlockTexture(vid->texture);
 	vid->pixels = NULL;
 	if (SDL_RenderClear(vid->renderer)) {
-		LOGE("Unable to clear the renderer. Reason: %s", SDL_LastError());
+		LOGE("Unable to clear the renderer. Reason: %s", SDL_GetError());
 		return 1;
 	}
 	// TODO: 4th argument will have to specify a region of the renderer
 	//       to draw to, otherwise aspect ratio can be broken.
 	if (SDL_RenderCopy(vid->renderer, vid->texture, NULL, NULL)) {
-		LOGE("Unable to copy texture to renderer. Reason: %s", SDL_LastError());
+		LOGE("Unable to copy texture to renderer. Reason: %s", SDL_GetError());
 		return 1;
 	}
 	SDL_RenderPresent(vid->renderer);
