@@ -32,15 +32,6 @@
 //-----------------------------------------------------------------------
 //=======================================================================
 
-//=======================================================================
-// decl get_char_line_data()
-// def get_char_line_data()
-//
-// TODO: Needs to account for line.
-// Returns a pointer to the first of the two bytes of character data
-// TODO
-//=======================================================================
-
 // LCDC bitmasks
 #define BGDISPLAY 0x01 // 0: BG off (DMG only), 1: BG on
 #define OBJDISPLAY 0x02 // 0: OBJs off, 1: OBJs on
@@ -133,7 +124,18 @@ struct twi_gb_ppu_line {
 	uint_fast8_t left_end_x;
 	uint_fast8_t num_middle_tiles;
 	uint_fast8_t right_end_x;
-}; // end struct twi_gb_ppu_line
+}; // end struct twi_gb_ppu_lin
+
+//=======================================================================
+// decl struct twi_gb_ppu_tile
+// def struct twi_gb_ppu_tile
+//=======================================================================
+struct twi_gb_ppu_tile {
+	uint_fast8_t y_begin;
+	uint_fast8_t y_end;
+	int_fast8_t x_shift_begin;
+	int_fast8_t x_shift_end;
+}; // end struct twi_gb_ppu_tile
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -280,8 +282,10 @@ draw_bg(
 	twi_assert_notnull(env->bg_codes);
 	twi_assert_notnull(ctl);
 	//---End argument validation---
-
+	
+	uint32_t* curr_px = (dest + (begin_line * SCREEN_PX_WIDTH));
 	// Draw color 0b00 for all pixels of selected lines if BG is off.
+	// TODO: Need to account for window event if BG is off!
 	if (!(env->ctl[TWI_GB_MEM_CTL_LCDC] & BGDISPLAY)) {
 		uint_fast16_t curr_px = start_line * SCREEN_PX_WIDTH;
 		uint_fast16_t end_px = end_line * SCREEN_PX_WIDTH;
@@ -294,15 +298,18 @@ draw_bg(
 	if (env->ctl[TWI_GB_MEM_CTL_LCDC] & WINDISPLAY) // Window on
 		wy = env->ctl[TWI_GB_MEM_CTL_WY];
 	else // Window off
-		wy = SCREEN_PX_HEIGHT;
+		wy = SCREEN_PX_HEIGHT; // bottom of the screen
 
 	//--------------------------
 	// Draw lines before window
 	//--------------------------
+	uint_fast8_t tile_x_offset = (env->ctl[TWI_GB_MEM_CTL_SCX] % TILE_PX_LENGTH);
+	struct twi_gb_ppu_line bg_lines = {.left_begin_x = tile_x_offset};
 	if (begin_line < wy) {
-		uint_fast16_t curr_px = start_line * SCREEN_PX_WIDTH;
-		uint_fast16_t end_px = ((wy < end_line) ?
-				(wy * SCREEN_PX_WIDTH) : (end_line * SCREEN_PX_WIDTH));
+		bg_lines.left_end_x = TILE_PX_LENGTH;
+		bg_lines.num_middle_tiles = (SCREEN_TILE_WIDTH-1);
+		bg_lines.right_end_x = tile_x_offset;
+		uint32_t* end_px = 
 	}
 	uint_fast8_t curr_px = start_line
 	
@@ -364,8 +371,10 @@ draw_bg_line_dmg(
 	// Draw the rightmost tile specially, which is
 	// necessary if the entire tile isn't drawn.
 	//----------------------------------------------
-	bg_gfx = fetch_bg_gfx(*(line_codes + line_codes_offset), gfx);
-	draw_bg_tile_line(dest, palette, bg_gfx + y_byte_offset, 0, x->right_end_x);
+	if (env->right_end_x != 0) {
+		bg_gfx = fetch_bg_gfx(*(line_codes + line_codes_offset), gfx);
+		draw_bg_tile_line(dest, palette, bg_gfx + y_byte_offset, 0, x->right_end_x);
+	}
 
 	return dest - original_dest; // Number of pixels drawn
 } // end draw_bg_line_dmg()
@@ -382,11 +391,15 @@ draw_bg_tile_line(
 		uint_fast8_t x_begin,
 		uint_fast8_t x_end
 ) {
+	//--- Begin argument validation ---
+	// NOTE: Extremely hot code.
+	// Comment out tests if they prove too impactful on performance.
 	twi_assert_notnull(dest);
 	twi_assert_notnull(palette);
 	twi_assert_notnull(bg_tile);
 	twi_assert_lteqi(x_end, TILE_PX_LENGTH);
 	twi_assert_lt(x_begin, x_end);
+	//--- End argument validation ---
 	
 	// TODO: This description should be in the file's description.
 	// Color palette consists of 4 colors, chosen by 2 bits
@@ -395,14 +408,76 @@ draw_bg_tile_line(
 	// bg_char[1] contains high bits, bg_char[0] contains low bits
 	// So, for example, the lowest order bits of the two-byte pair
 	// determine the tile's rightmost pixel's color.
-	uint_fast16_t dest_pos = 0;
 	uint_fast8_t pos = (TILE_PX_LENGTH-1) - x_begin;
 	uint_fast8_t end = TILE_PX_LENGTH - x_end;
-	for (; pos >= end; --pos, ++dest_pos) {
-		dest[dest_pos] = palette[(((bg_tile[1] >> pos) & 0x1) << 1) | ((bg_tile[0] >> pos) & 0x1)];
+	for (; pos >= end; --pos, ++dest) {
+		*dest = palette[(((bg_tile[1] >> pos) & 0x1) << 1) | ((bg_tile[0] >> pos) & 0x1)];
 	} // end iteration through pixels of tile line
 	return (x_end - x_begin);
 } // end draw_bg_tile_line()
+
+//=======================================================================
+// decl draw_tile()
+// def draw_tile()
+// TODO
+//=======================================================================
+static inline void
+draw_tile(
+		uint32_t* dest,
+		uint32_t palette[4],
+		uint8_t gfx[16],
+		const struct twi_gb_ppu_tile* tile
+) {
+	twi_assert_notnull(tile);
+	twi_assert_gteqi(tile->y_begin, 0);
+	twi_assert_lt(tile->y_begin, tile->y_end);
+	twi_assert_lt(tile->y_end, TILE_PX_LENGTH);
+
+	for (uint_fast8_t y = y_begin; y < y_end; ++y, dest += SCREEN_PX_WIDTH)
+		draw_tile_line(dest, palette, gfx + (y*2), tile->x_shift_begin, tile->x_shift_end);
+} // end draw_tile()
+
+//=======================================================================
+// decl draw_tile_line()
+// def draw_tile_line()
+// TODO
+//=======================================================================
+static inline void
+draw_tile_line(
+		uint32_t* dest,
+		const uint32_t palette[4],
+		const uint8_t gfx[2],
+		int_fast8_t shift_begin,
+		int_fast8_t shift_end
+) {
+	twi_assert_notnull(dest);
+	twi_assert_notnull(palette);
+	twi_assert_notnull(gfx);
+	twi_assert_lt(shift_begin, UINT8_WIDTH);
+	twi_assert_gt(shift_begin, shift_end);
+	twi_assert_lteqi(shift_end, -1);
+
+	uint_fast16_t high = gfx[1] << 1;
+	for (int_fast8_t shift = shift_begin; shift > shift_end; --shift)
+		*(dest++) = palette[((high >> shift) & 0x2) | ((gfx[0] >> shift) & 0x1)];
+} // end draw_tile_line()
+
+//=======================================================================
+// decl resolve_pixel_color()
+// def resolve_pixel_color()
+// TODO
+//=======================================================================
+static inline uint32_t
+resolve_pixel_color(
+		uint32_t palette[4],
+		uint8_t gfx[2],
+		uint_fast8_t shift
+) {
+	twi_assert_notnull(palette);
+	twi_assert_notnull(gfx);
+	twi_assert_lti(shift, UINT8_WIDTH);
+	return palette[(((gfx[1] >> shift) & 0x1) >> 1) | ((gfx[0] >> shift) & 0x1)];
+} // end resolve_pixel_color()
 
 //=======================================================================
 // def fetch_bg_gfx()
@@ -432,7 +507,7 @@ get_palette_data(
 		const uint8_t* mem_ctl,
 		enum twi_gb_mode mode
 ) {
-	twi_assert_notnull(mem);
+	twi_assert_notnull(mem_ctl);
 
 	switch (mode) {
 		case TWI_GB_MODE_DMG:
