@@ -5,10 +5,11 @@ define twi_std_source
 endef
 # List twi_gb source files to compile and link here.
 define twi_gb_source 
+	gb.c
 	log.c
 	main.c
 	mem.c
-	sdl.c
+	vid.c
 endef
 #========================================================================
 # DO NOT MODIFY ANYTHING BELOW THIS POINT
@@ -35,7 +36,7 @@ includes_dir = includes
 libs_dir = libs
 
 # Compilation flags
-CFLAGS := -I$(includes_dir) -L$(libs_dir) $(shell pkgconf --libs sdl2)
+CFLAGS := -I$(includes_dir) -L$(libs_dir) $(shell pkgconf --libs sdl2 glew)
 DBG_CFLAGS := -g
 RLS_CFLAGS :=
 

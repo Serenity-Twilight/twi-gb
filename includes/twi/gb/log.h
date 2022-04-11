@@ -99,8 +99,16 @@ extern struct twi_log* twi_gb_log;
 
 #if TWI_GB_LOG_NOERROR
 #	define LOGE(...) ((void)0)
+#	define LOGCE(...) ((void)0)
 #else
 # define LOGE(msg, ...) LOG(TWI_GB_LOG_LEVEL_ERROR, msg, ##__VA_ARGS__)
+#	include <errno.h>
+#	include <string.h>
+#	define LOGCE(msg, ...) \
+	if (errno != 0) \
+		LOGE(msg " (%s)", ##__VA_ARGS__, strerror(errno)); \
+	else \
+		LOGE(msg " (no errno)", ##__VA_ARGS__)
 #endif // TWI_GB_LOG_NOERROR
 
 #if TWI_GB_LOG_NOWARN
@@ -143,6 +151,7 @@ extern struct twi_log* twi_gb_log;
 	twi_gb_log_delete(); \
 }
 
+// TODO: Give proper descriptions.
 uint_fast8_t twi_gb_log_create();
 void twi_gb_log_delete();
 
