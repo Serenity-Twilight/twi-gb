@@ -18,6 +18,8 @@
 // along with twi-gb. If not, see <https://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------
 //=======================================================================
+#include <threads.h>
+#include <time.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_video.h>
@@ -44,7 +46,13 @@ static void handle_window_event(struct twi_gb*, SDL_Event* event);
 //=======================================================================
 void
 twi_gb_run(struct twi_gb* gb) {
-	while (handle_events(gb));
+	struct timespec slp_time = {.tv_sec=0, .tv_nsec=15000000L};
+	for (;;) {
+		thrd_sleep(&slp_time, NULL);
+		if (!handle_events(gb))
+			return;
+		twi_gb_vid_draw(&(gb->vid));
+	} // end infinite loop
 } // end twi_gb_run()
 
 //=======================================================================
@@ -62,15 +70,13 @@ static uint_fast8_t
 handle_events(struct twi_gb* gb) {
 	twi_assert_notnull(gb);
 
-	for (;;) {
-		SDL_Event event;
-		while (SDL_PollEvent(&event)) {
-			switch(event.type) {
-				case SDL_WINDOWEVENT: handle_window_event(gb, &event); break;
-				case SDL_QUIT: return 0;
-			} // end determination of event type
-		} // end polling of pending events
-	} // end infinite loop (returns on SDL_QUIT)
+	SDL_Event event;
+	while (SDL_PollEvent(&event)) {
+		switch(event.type) {
+			case SDL_WINDOWEVENT: handle_window_event(gb, &event); break;
+			case SDL_QUIT: return 0;
+		} // end determination of event type
+	} // end polling of pending events
 	
 	return 1;
 } // end handle_events()

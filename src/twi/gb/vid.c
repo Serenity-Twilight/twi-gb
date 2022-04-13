@@ -134,10 +134,10 @@ twi_gb_vid_init(struct twi_gb_vid* vid) {
 	} // end creation of render-to-window program
 	uint32_t vs, fs;
 	if (!(vs = compile_shader("gl/dmg.vs", GL_VERTEX_SHADER)))
-		goto destroy_window_program;
+		goto destroy_context;
 	if (!(fs = compile_shader("gl/dmg.fs", GL_FRAGMENT_SHADER))) {
 		glDeleteShader(vs);
-		goto destroy_window_program;
+		goto destroy_context;
 	}
 	glAttachShader(vid->window_program, vs);
 	glAttachShader(vid->window_program, fs);
@@ -153,7 +153,7 @@ twi_gb_vid_init(struct twi_gb_vid* vid) {
 			glGetProgramInfoLog(vid->window_program, GL_BUFSZ, NULL, infolog);
 			LOGE("OpenGL program linker failure. Info Log:\n%s", infolog);
 			while (glGetError()); // Clear error flags, if set.
-			goto destroy_window_program;
+			goto destroy_context;
 		} // end if linker failed
 	}
 	glUseProgram(vid->window_program);
@@ -182,11 +182,10 @@ twi_gb_vid_init(struct twi_gb_vid* vid) {
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);
 	SDL_GL_SwapWindow(vid->window);
 
+	vid->flags = 0;
 	return 0;
 
 	// Cleanup, in the case of failure.
-destroy_window_program:
-	glDeleteProgram(vid->window_program);
 destroy_context:
 	SDL_GL_DeleteContext(vid->gl);
 destroy_window:
@@ -204,14 +203,34 @@ twi_gb_vid_destroy(struct twi_gb_vid* vid) {
 } // end twi_gb_vid_destroy()
 
 //=======================================================================
-// def twi_gb_vid_onchange_resolution
+// def twi_gb_vid_draw()
+//=======================================================================
+void
+twi_gb_vid_draw(struct twi_gb_vid* vid) {
+	twi_assert_notnull(vid);
+
+	SDL_GL_MakeCurrent(vid->window, vid->gl);
+	// Update internal GL resolution if it has changed since the last draw.
+	if (vid->flags & RESOLUTION_CHANGED) {
+		int width, height;
+		SDL_GetWindowSize(vid->window, &width, &height);
+		gl_update_res(vid, width, height);
+		vid->flags &= ~RESOLUTION_CHANGED;
+	}
+
+	glClear(GL_COLOR_BUFFER_BIT);
+	glUseProgram(vid->window_program);
+	glBindVertexArray(vid->vao);
+	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);
+	SDL_GL_SwapWindow(vid->window);
+} // end twi_gb_vid_draw()
+
+//=======================================================================
+// def twi_gb_vid_onchange_resolution()
 //=======================================================================
 void
 twi_gb_vid_onchange_resolution(struct twi_gb_vid* vid) {
 	vid->flags |= RESOLUTION_CHANGED;
-	//int width, height;
-	//SDL_GetWindowSize(vid->window, &width, &height);
-	//set_resolution(vid, width, height);
 } // end twi_gb_vid_onchange_resolution()
 
 //=======================================================================
