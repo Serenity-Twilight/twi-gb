@@ -62,13 +62,15 @@ static uint_fast8_t
 handle_events(struct twi_gb* gb) {
 	twi_assert_notnull(gb);
 
-	SDL_Event event;
-	while (SDL_PollEvent(&event)) {
-		switch(event.type) {
-			case SDL_WINDOWEVENT: handle_window_event(gb, &event); break;
-			case SDL_QUIT: return 0;
-		} // end determination of event type
-	} // end polling of pending events
+	for (;;) {
+		SDL_Event event;
+		while (SDL_PollEvent(&event)) {
+			switch(event.type) {
+				case SDL_WINDOWEVENT: handle_window_event(gb, &event); break;
+				case SDL_QUIT: return 0;
+			} // end determination of event type
+		} // end polling of pending events
+	} // end infinite loop (returns on SDL_QUIT)
 	
 	return 1;
 } // end handle_events()

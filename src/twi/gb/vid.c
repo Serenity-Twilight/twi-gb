@@ -28,6 +28,7 @@
 #include <SDL2/SDL_video.h>
 #include <twi/gb/log.h>
 #include <twi/gb/vid.h>
+#include <twi/std/assert.h>
 #include <twi/std/utils.h>
 
 //=======================================================================
@@ -45,10 +46,37 @@ static const uint_fast8_t RESOLUTION_CHANGED = 0x01;
 static const double GB_LCD_WIDTH = 160.0; // px
 static const double GB_LCD_HEIGHT = 144.0; // px
 
-// Maximum number of bytes of shader source that are allowed to
-// be allocated to the stack. If a shader's source is larger than this
-// value, it received dynamically-allocated storage.
-static const size_t MAX_STACK_SHADER_SIZE = 262144; // 256 KiB
+// Maximum number of bytes allocated for the following OpenGL operations:
+// * The maximum number of bytes of shader source code that will be
+//   stored on the stack. If shader source exceeds this size, then space
+//   will be dynamically allocated for it.
+// * The maximum number of bytes for an OpenGL Info Log dump.
+static const size_t GL_BUFSZ = 65536; // 64 KiB
+
+// Element buffer object that defines what vertices to use when drawing
+// the triangles that the main screen is composed of.
+// vertex 0: top left
+// vertex 1: top right
+// vertex 2: bottom left
+// vertex 3: bottom right
+// The first three values are the offsets of the vertices for the first
+// triangle, and the second set of three values are the offsets of the
+// vertices for the second triangle.
+//
+// Order matters! By default, OpenGL considers triangles drawn
+// counter-clockwise to be facing the screen, and clockwise to be facing
+// away from it. Therefore, triangles are drawn in a counter-clockwise
+// motion.
+static const uint8_t EBO_DATA[] = {0, 2, 1, 1, 2, 3};
+
+//=======================================================================
+//-----------------------------------------------------------------------
+// Private function declarations
+//-----------------------------------------------------------------------
+//=======================================================================
+static uint32_t compile_shader(const char*, GLenum);
+static const char* gl_strerror(GLenum);
+static void gl_update_res(struct twi_gb_vid*, int, int);
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -95,29 +123,70 @@ twi_gb_vid_init(struct twi_gb_vid* vid) {
 		goto destroy_context;
 	}
 
-	// Compile vertex and fragment shaders.
+	// Compile shaders and link program.
 	// compile_shader() writes detailed error messages on failure.
-	if (!(vid->vs = compile_shader("gl/dmg.vs", GL_VERTEX_SHADER)))
+	if (!(vid->window_program = glCreateProgram())) {
+		LOGE("Failed to create OpenGL program for rendering to window. Error flags:");
+		GLenum error_code;
+		while (error_code = glGetError())
+			LOGE(gl_strerror(error_code));
 		goto destroy_context;
-	if (!(vid->fs = compile_shader("gl/dmg.fs", GL_FRAGMENT_SHADER)))
-		goto destroy_vs;
+	} // end creation of render-to-window program
+	uint32_t vs, fs;
+	if (!(vs = compile_shader("gl/dmg.vs", GL_VERTEX_SHADER)))
+		goto destroy_window_program;
+	if (!(fs = compile_shader("gl/dmg.fs", GL_FRAGMENT_SHADER))) {
+		glDeleteShader(vs);
+		goto destroy_window_program;
+	}
+	glAttachShader(vid->window_program, vs);
+	glAttachShader(vid->window_program, fs);
+	glLinkProgram(vid->window_program);
+	glDeleteShader(fs);
+	glDeleteShader(vs);
+	{
+		// Check if successful.
+		int32_t success;
+		glGetProgramiv(vid->window_program, GL_LINK_STATUS, &success);
+		if (!success) {
+			char infolog[GL_BUFSZ];
+			glGetProgramInfoLog(vid->window_program, GL_BUFSZ, NULL, infolog);
+			LOGE("OpenGL program linker failure. Info Log:\n%s", infolog);
+			while (glGetError()); // Clear error flags, if set.
+			goto destroy_window_program;
+		} // end if linker failed
+	}
+	glUseProgram(vid->window_program);
 
-	glGenBuffers(1, &(vid->vbo)); // Vertex Attribute Object
-	set_resolution(vid, width, height);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	// Create buffers
+	glGenVertexArrays(1, &(vid->vao)); // Vertex Array Object
+	{
+		uint32_t buffers[2];
+		glGenBuffers(2, buffers);
+		vid->vbo = buffers[0]; // Vertex Buffer Object
+		vid->ebo = buffers[1]; // Element Buffer Object
+	}
+	
+	// Bind and define buffers
+	glBindVertexArray(vid->vao);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vid->ebo);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(EBO_DATA), EBO_DATA, GL_STATIC_DRAW);
+	gl_update_res(vid, width, height);
+	// Above function binds the vbo and sets its data.
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // black
 	glClear(GL_COLOR_BUFFER_BIT);
+
+	// First draw
+	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);
 	SDL_GL_SwapWindow(vid->window);
-	//int block_size;
-	//glGetIntegerv(GL_MAX_TEXTURE_BUFFER_SIZE, &block_size);
-	//printf("GL_MAX_UNIFORM_BLOCK_SIZE: %d\n", block_size);
 
 	return 0;
 
 	// Cleanup, in the case of failure.
-destroy_fs:
-	glDeleteShader(vid->fs);
-destroy_vs:
-	glDeleteShader(vid->vs);
+destroy_window_program:
+	glDeleteProgram(vid->window_program);
 destroy_context:
 	SDL_GL_DeleteContext(vid->gl);
 destroy_window:
@@ -139,6 +208,7 @@ twi_gb_vid_destroy(struct twi_gb_vid* vid) {
 //=======================================================================
 void
 twi_gb_vid_onchange_resolution(struct twi_gb_vid* vid) {
+	vid->flags |= RESOLUTION_CHANGED;
 	//int width, height;
 	//SDL_GetWindowSize(vid->window, &width, &height);
 	//set_resolution(vid, width, height);
@@ -157,6 +227,8 @@ twi_gb_vid_onchange_resolution(struct twi_gb_vid* vid) {
 //=======================================================================
 static uint32_t
 compile_shader(const char* path, GLenum type) {
+	twi_assert_notnull(path);
+
 	// Determine shader source size.
 	size_t src_size = twi_fsize(path) + 1; // +1 for NULL terminator.
 	if (src_size == ((size_t)-1)) {
@@ -165,9 +237,9 @@ compile_shader(const char* path, GLenum type) {
 	}
 
 	// Allocate memory for shader source.
-	unsigned char src_stack[MAX_STACK_SHADER_SIZE];
-	unsigned char* src;
-	if (src_size > MAX_STACK_SHADER_SIZE) {
+	char src_stack[GL_BUFSZ];
+	char* src;
+	if (src_size > GL_BUFSZ) {
 		errno = 0;
 		src = malloc(src_size);
 		if (src == NULL) {
@@ -198,10 +270,13 @@ compile_shader(const char* path, GLenum type) {
 	// Create shader and input source.
 	uint32_t shader_handle = glCreateShader(type);
 	if (shader_handle == 0) {
-		LOGF("Unable to allocate OpenGL shader object.");
+		LOGE("Unable to allocate OpenGL shader object. Error flags:");
+		GLenum error_code;
+		while (error_code = glGetError())
+			LOGE(gl_strerror(error_code));
 		goto failure_dealloc;
 	}
-	glShaderSource(shader_handle, 1, &src, NULL);
+	glShaderSource(shader_handle, 1, (const char* const*)&src, NULL);
 	// Dynamically-allocated memory no longer required.
 	if (src != src_stack)
 		free(src);
@@ -213,9 +288,10 @@ compile_shader(const char* path, GLenum type) {
 	if (!gl_success) {
 		// Compilation failed. Output InfoLog to process log.
 		// The shader source is no longer required, so that memory will be reused.
-		glGetShaderInfoLog(shader_handle, MAX_STACK_SHADER_SIZE, NULL, src_stack);
+		glGetShaderInfoLog(shader_handle, GL_BUFSZ, NULL, src_stack);
 		glDeleteShader(shader_handle);
 		LOGE("Open GL shader compilation failure. Info Log:\n%s", src_stack);
+		while (glGetError()); // Clear error flags, in case they are set.
 		return 0;
 	}
 	return shader_handle;
@@ -227,24 +303,57 @@ failure_dealloc:
 } // end compile_shader()
 
 //=======================================================================
-// decl set_resolution()
-// def set_resolution()
+// decl gl_strerror()
+// def gl_strerror()
+// TODO
+//=======================================================================
+static const char*
+gl_strerror(GLenum error_code) {
+	switch (error_code) {
+		case GL_INVALID_ENUM: return "GL_INVALID_ENUM";
+		case GL_INVALID_VALUE: return "GL_INVALID_VALUE";
+		case GL_INVALID_OPERATION: return "GL_INVALID_OPERATION";
+		case GL_INVALID_FRAMEBUFFER_OPERATION: return "GL_INVALID_FRAMEBUFFER_OPERATION";
+		case GL_OUT_OF_MEMORY: return "GL_OUT_OF_MEMORY";
+		case GL_STACK_UNDERFLOW: return "GL_STACK_UNDERFLOW";
+		case GL_STACK_OVERFLOW: return "GL_STACK_OVERFLOW";
+		default: return "Not a known OpenGL error.";
+	} // end switch statement over error codes
+} // end gl_strerror()
+
+//=======================================================================
+// decl gl_update_res()
+// def gl_update_res()
 // TODO
 //=======================================================================
 static void
-set_resolution(struct twi_gb_vid* vid, int width, int height) {
+gl_update_res(struct twi_gb_vid* vid, int width, int height) {
 	glViewport(0, 0, width, height);
+	glBindBuffer(GL_ARRAY_BUFFER, vid->vbo);
 
 	// Update internal viewport size of emulated LCD screen.
 	double width_ratio = GB_LCD_WIDTH / width;
 	double height_ratio = GB_LCD_HEIGHT / height;
 	if (height_ratio > width_ratio) {
 		// Clamp by height
+		double width_scale = width_ratio / height_ratio;
+		float vertices[] = {
+			-width_scale, 1.0,
+			width_scale, 1.0,
+			-width_scale, -1.0,
+			width_scale, -1.0
+		};
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 	} else {
 		// Clamp by width
-	}
-	glBindBuffer(GL_ARRAY_BUFFER, vid->vbo);
-	//glClear(GL_COLOR_BUFFER_BIT);
-	//SDL_GL_SwapWindow(vid->window);
-} // end set_resolution()
+		double height_scale = height_ratio / width_ratio;
+		float vertices[] = {
+			-1.0, height_scale,
+			1.0, height_scale,
+			-1.0, -height_scale,
+			1.0, -height_scale
+		};
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	} // end determining what axis to clamp to
+} // end gl_update_res()
 

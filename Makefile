@@ -2,6 +2,7 @@
 # List twi source files to compile and link here.
 define twi_std_source
 	log.c
+	utils.c
 endef
 # List twi_gb source files to compile and link here.
 define twi_gb_source 

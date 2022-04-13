@@ -39,9 +39,10 @@
 struct twi_gb_vid {
 	SDL_Window* window;
 	SDL_GLContext gl;
+	uint32_t window_program;
+	uint32_t vao;
 	uint32_t vbo;
-	uint32_t vs;
-	uint32_t fs;
+	uint32_t ebo;
 	uint_fast8_t flags;
 }; // end struct twi_gb_vid
 
