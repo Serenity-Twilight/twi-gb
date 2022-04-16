@@ -89,6 +89,15 @@
 	long long _immed = (immed); \
 	twi_assertf(_lhs < _immed, "`" #lhs "` must be less than or equal to %lld (`" #lhs "` = %lld).", _immed, _lhs); \
 }
+
+// Checks if the value of the variable on the left is greater than
+// the immediate (numeric constant) value on the right.
+// Terminates with a predefined message if the above condition is false.
+#define twi_assert_gti(lhs, immed) { \
+	long long _lhs = (lhs); \
+	long long _immed = (immed); \
+	twi_assertf(_lhs > _immed, "`" #lhs "` must be greater than or equal to %lld (`" #lhs "` = %lld).", _immed, _lhs); \
+}
 #endif // TWI_NOASSERT
 #endif // TWI_ASSERT_H
 

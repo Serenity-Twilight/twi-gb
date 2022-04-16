@@ -53,28 +53,24 @@ static const double GB_LCD_HEIGHT = 144.0; // px
 // * The maximum number of bytes for an OpenGL Info Log dump.
 static const size_t GL_BUFSZ = 65536; // 64 KiB
 
-// Element buffer object that defines what vertices to use when drawing
-// the triangles that the main screen is composed of.
-// vertex 0: top left
-// vertex 1: top right
-// vertex 2: bottom left
-// vertex 3: bottom right
-// The first three values are the offsets of the vertices for the first
-// triangle, and the second set of three values are the offsets of the
-// vertices for the second triangle.
-//
-// Order matters! By default, OpenGL considers triangles drawn
-// counter-clockwise to be facing the screen, and clockwise to be facing
-// away from it. Therefore, triangles are drawn in a counter-clockwise
-// motion.
-static const uint8_t EBO_DATA[] = {0, 2, 1, 1, 2, 3};
+// The number of elements rendered in order to draw a single quad
+// (composed of two triangles).
+static const uint_fast8_t QUAD_NUM_ELEMENTS = 6;
+
+//=======================================================================
+//-----------------------------------------------------------------------
+// Private type definitions
+//-----------------------------------------------------------------------
+//=======================================================================
 
 //=======================================================================
 //-----------------------------------------------------------------------
 // Private function declarations
 //-----------------------------------------------------------------------
 //=======================================================================
-static uint32_t compile_shader(const char*, GLenum);
+static uint32_t gl_compile_program(size_t, const char* const[], const GLenum[]);
+static uint32_t gl_compile_shader(const char*, GLenum);
+static void gl_log_errors(GLenum);
 static const char* gl_strerror(GLenum);
 static void gl_update_res(struct twi_gb_vid*, int, int);
 
@@ -117,72 +113,81 @@ twi_gb_vid_init(struct twi_gb_vid* vid) {
 		goto destroy_window;
 	}
 
+	//printf("%s\n", glGetString(GL_VERSION));
+
 	// TODO: Report specific GL errors.
 	if (glewInit() != GLEW_OK) {
 		LOGF("Failed to initialize OpenGL extensions via GLEW.");
 		goto destroy_context;
 	}
 
-	// Compile shaders and link program.
-	// compile_shader() writes detailed error messages on failure.
-	if (!(vid->window_program = glCreateProgram())) {
-		LOGE("Failed to create OpenGL program for rendering to window. Error flags:");
-		GLenum error_code;
-		while (error_code = glGetError())
-			LOGE(gl_strerror(error_code));
-		goto destroy_context;
-	} // end creation of render-to-window program
-	uint32_t vs, fs;
-	if (!(vs = compile_shader("gl/dmg.vs", GL_VERTEX_SHADER)))
-		goto destroy_context;
-	if (!(fs = compile_shader("gl/dmg.fs", GL_FRAGMENT_SHADER))) {
-		glDeleteShader(vs);
-		goto destroy_context;
-	}
-	glAttachShader(vid->window_program, vs);
-	glAttachShader(vid->window_program, fs);
-	glLinkProgram(vid->window_program);
-	glDeleteShader(fs);
-	glDeleteShader(vs);
-	{
-		// Check if successful.
-		int32_t success;
-		glGetProgramiv(vid->window_program, GL_LINK_STATUS, &success);
-		if (!success) {
-			char infolog[GL_BUFSZ];
-			glGetProgramInfoLog(vid->window_program, GL_BUFSZ, NULL, infolog);
-			LOGE("OpenGL program linker failure. Info Log:\n%s", infolog);
-			while (glGetError()); // Clear error flags, if set.
+	{	// Compile main rendering program.
+		uint32_t program;
+		static const char* const src_path[] = {"gl/vs", "gl/dmgfs"};
+		static const GLenum type[] = {GL_VERTEX_SHADER, GL_FRAGMENT_SHADER};
+		if (!(program = gl_compile_program(2, src_path, type)))
 			goto destroy_context;
-		} // end if linker failed
+		glUseProgram(program);
 	}
-	glUseProgram(vid->window_program);
 
-	// Create buffers
-	glGenVertexArrays(1, &(vid->vao)); // Vertex Array Object
-	{
-		uint32_t buffers[2];
-		glGenBuffers(2, buffers);
-		vid->vbo = buffers[0]; // Vertex Buffer Object
-		vid->ebo = buffers[1]; // Element Buffer Object
+	{	// Vertex Array Object
+		uint32_t vao;
+		glGenVertexArrays(1, &vao);
+		glBindVertexArray(vao);
 	}
+
+	{	// Create buffers
+		// [0]: Vertex Buffer Object
+		// [1]: Element Buffer Object
+		uint32_t gl_buf[2];
+		glGenBuffers(2, gl_buf);
 	
-	// Bind and define buffers
-	glBindVertexArray(vid->vao);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vid->ebo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(EBO_DATA), EBO_DATA, GL_STATIC_DRAW);
-	gl_update_res(vid, width, height);
-	// Above function binds the vbo and sets its data.
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
+		{ // Initialize & configure Vertex Buffer Object
+			static const float vbo_data[] = {
+				-1.0f, 1.0f, // top-left vertex
+				1.0f, 1.0f, // top-right vertex
+				-1.0f, -1.0f, // bottom-left vertex
+				1.0f, -1.0f // bottom-right vertex
+			};
+			glBindBuffer(GL_ARRAY_BUFFER, gl_buf[0]);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vbo_data), vbo_data, GL_STATIC_DRAW);
+			glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+			glEnableVertexAttribArray(0);
+		}
+		{ // Initialize Element Buffer object
+			// 0: top-left of quad
+			// 1: top-right of quad
+			// 2: bottom-left of quad
+			// 3: bottom-right of quad
+			// Indices 0-2 are for the top-left triangle of the quad.
+			// Indices 3-5 are for the bottom-right triangle of the quad.
+			// Indices are ordered such that triangles are drawn counter-clockwise,
+			// which, by default in OpenGL, makes them front-facing (facing the screen).
+			static const uint8_t ebo_data[] = {0, 2, 1, 1, 2, 3};
+			twi_assertf(sizeof(ebo_data) == QUAD_NUM_ELEMENTS,
+					"The size of the `ebo_data` (%zu) array used to intialize "
+					"the EBO does not equal QUAD_NUM_ELEMENTS (%" PRIuFAST8 ").",
+					sizeof(ebo_data), QUAD_NUM_ELEMENTS);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl_buf[1]);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(ebo_data), ebo_data, GL_STATIC_DRAW);
+		}
+	} // end stack allocation control block around buffer creation
+
+	// Initialize framebuffer and its renderbuffer, which will be the target of all
+	// rendering operations and will have its contents blitted to the default
+	// framebuffer in order to render the emulated screen independent of window resolution.
+	glGenFramebuffers(1, &(vid->fbo)); // Framebuffer Object
+	glBindFramebuffer(GL_FRAMEBUFFER, vid->fbo);
+	{	// Create, configure, and attach Renderbuffer Object
+		uint32_t rbo;
+		glGenRenderbuffers(1, &rbo);
+		glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA32F, GB_LCD_WIDTH, GB_LCD_HEIGHT);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rbo);
+	}
+
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // black
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	// First draw
-	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);
-	SDL_GL_SwapWindow(vid->window);
-
-	vid->flags = 0;
+	vid->flags = RESOLUTION_CHANGED;
 	return 0;
 
 	// Cleanup, in the case of failure.
@@ -218,10 +223,21 @@ twi_gb_vid_draw(struct twi_gb_vid* vid) {
 		vid->flags &= ~RESOLUTION_CHANGED;
 	}
 
+	// Draw all pixels of the LCD.
+	glBindFramebuffer(GL_FRAMEBUFFER, vid->fbo);
 	glClear(GL_COLOR_BUFFER_BIT);
-	glUseProgram(vid->window_program);
-	glBindVertexArray(vid->vao);
-	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);
+	glDrawElements(GL_TRIANGLES, QUAD_NUM_ELEMENTS, GL_UNSIGNED_BYTE, 0);
+
+	// Blit renderbuffer output to the default framebuffer,
+	// centering the image within the window and maintaining aspect ratio.
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, vid->fbo);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glBlitFramebuffer(
+			0, 0, GB_LCD_WIDTH, GB_LCD_HEIGHT,
+			vid->winx0, vid->winy0, vid->winx1, vid->winy1,
+			GL_COLOR_BUFFER_BIT, GL_NEAREST
+	);
 	SDL_GL_SwapWindow(vid->window);
 } // end twi_gb_vid_draw()
 
@@ -240,12 +256,69 @@ twi_gb_vid_onchange_resolution(struct twi_gb_vid* vid) {
 //=======================================================================
 
 //=======================================================================
-// decl compile_shader()
-// def compile_shader()
+// decl gl_compile_program()
+// def gl_compile_program()
 // TODO
 //=======================================================================
 static uint32_t
-compile_shader(const char* path, GLenum type) {
+gl_compile_program(
+		size_t num_shaders,
+		const char* const src_path[num_shaders],
+		const GLenum type[num_shaders]
+) {
+	// Assert argument correctness.
+	twi_assert_gti(num_shaders, 0);
+	twi_assert_notnull(src_path);
+	twi_assert_notnull(type);
+	for (size_t i = 0; i < num_shaders; ++i)
+		twi_assert_notnull(src_path[i]);
+
+	uint32_t program = glCreateProgram();
+	if (!program) {
+		LOGE("Failed to create OpenGL program. Error flags:");
+		gl_log_errors(0);
+		return 0;
+	}
+
+	uint32_t shaders[num_shaders];
+	for (size_t i = 0; i < num_shaders; ++i) {
+		// gl_compile_shader() handles error logging if necessary.
+		shaders[i] = gl_compile_shader(src_path[i], type[i]);
+		if (!shaders[i]) {
+			// Delete previously-compiled shaders.
+			while (i > 0)
+				glDeleteShader(shaders[--i]);
+			glDeleteProgram(program);
+			return 0;
+		} // end if shader compilation failed
+		glAttachShader(program, shaders[i]);
+	} // end shader compilation and attachment
+	
+	glLinkProgram(program);
+	for (size_t i = 0; i < num_shaders; ++i)
+		glDeleteShader(shaders[i]);
+
+	int32_t success;
+	glGetProgramiv(program, GL_LINK_STATUS, &success);
+	if (!success) {
+		char infolog[GL_BUFSZ];
+		glGetProgramInfoLog(program, GL_BUFSZ, NULL, infolog);
+		LOGE("OpenGL program linker failure. Info Log:\n%s", infolog);
+		while (glGetError()); // Clear any set error flags.
+		glDeleteProgram(program);
+		return 0;
+	} // end if program linking failed
+
+	return program;
+} // end gl_compile_program()
+
+//=======================================================================
+// decl gl_compile_shader()
+// def gl_compile_shader()
+// TODO
+//=======================================================================
+static uint32_t
+gl_compile_shader(const char* path, GLenum type) {
 	twi_assert_notnull(path);
 
 	// Determine shader source size.
@@ -319,7 +392,33 @@ failure_dealloc:
 	if (src != src_stack)
 		free(src);
 	return 0;
-} // end compile_shader()
+} // end gl_compile_shader()
+
+//=======================================================================
+// decl gl_log_errors()
+// def gl_log_errors()
+// TODO
+//=======================================================================
+void
+gl_log_errors(GLenum first_error) {
+	// If caller passed an initial pre-fetched error, log now.
+	if (first_error)
+		LOGE(gl_strerror(first_error));
+
+	// If the caller did not pass an error, and no error flags are set,
+	// log the lack of errors for log readability.
+	GLenum error_code = glGetError();
+	if (!error_code && !first_error) {
+		LOGE("No GL error codes.");
+		return;
+	}
+
+	// Log the remainder of the errors.
+	while (error_code) {
+		LOGE(gl_strerror(error_code));
+		error_code = glGetError();
+	}
+} // end gl_log_errors()
 
 //=======================================================================
 // decl gl_strerror()
@@ -348,31 +447,30 @@ gl_strerror(GLenum error_code) {
 static void
 gl_update_res(struct twi_gb_vid* vid, int width, int height) {
 	glViewport(0, 0, width, height);
-	glBindBuffer(GL_ARRAY_BUFFER, vid->vbo);
 
-	// Update internal viewport size of emulated LCD screen.
+	// Update default framebuffer rendering size to maintain aspect ratio.
 	double width_ratio = GB_LCD_WIDTH / width;
 	double height_ratio = GB_LCD_HEIGHT / height;
 	if (height_ratio > width_ratio) {
-		// Clamp by height
-		double width_scale = width_ratio / height_ratio;
-		float vertices[] = {
-			-width_scale, 1.0,
-			width_scale, 1.0,
-			-width_scale, -1.0,
-			width_scale, -1.0
-		};
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+		// Use full window height, clamp width to aspect ratio.
+		vid->winy0 = 0;
+		vid->winy1 = height;
+		uint_fast16_t mid = width / 2;
+		double reach = (GB_LCD_WIDTH / height_ratio) / 2;
+		vid->winx0 = mid - reach;
+		vid->winx1 = mid + reach;
+		if (reach - (uint_fast16_t)reach > 0) // Round up
+			++(vid->winx1);
 	} else {
-		// Clamp by width
-		double height_scale = height_ratio / width_ratio;
-		float vertices[] = {
-			-1.0, height_scale,
-			1.0, height_scale,
-			-1.0, -height_scale,
-			1.0, -height_scale
-		};
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+		// Use full window width, clamp height to aspect ratio.
+		vid->winx0 = 0;
+		vid->winx1 = width;
+		uint_fast16_t mid = height / 2;
+		double reach = (GB_LCD_HEIGHT / width_ratio) / 2;
+		vid->winy0 = mid - reach;
+		vid->winy1 = mid + reach;
+		if (reach - (uint_fast16_t)reach > 0) // Round up
+			++(vid->winy1);
 	} // end determining what axis to clamp to
 } // end gl_update_res()
 
