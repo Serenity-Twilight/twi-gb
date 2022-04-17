@@ -24,6 +24,7 @@
 
 #include <stdint.h>
 #include <SDL2/SDL_video.h>
+#include <twi/gb/mem.h>
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -40,11 +41,17 @@ struct twi_gb_vid {
 	SDL_Window* window;
 	SDL_GLContext gl;
 	uint32_t fbo;
+	uint32_t vram_ubo;
+	uint32_t oamctl_ubo;
 	uint16_t winx0;
 	uint16_t winx1;
 	uint16_t winy0;
 	uint16_t winy1;
-	uint_fast8_t flags;
+	uint8_t vram_seg;
+	uint8_t oamctl_seg;
+	uint8_t vram_num_segs;
+	uint8_t oamctl_num_segs;
+	uint8_t flags;
 }; // end struct twi_gb_vid
 
 //=======================================================================
@@ -72,7 +79,7 @@ twi_gb_vid_destroy(struct twi_gb_vid* vid);
 // TODO
 //=======================================================================
 void
-twi_gb_vid_draw(struct twi_gb_vid* vid);
+twi_gb_vid_draw(struct twi_gb_vid* vid, const struct twi_gb_mem* mem);
 
 //=======================================================================
 // decl twi_gb_vid_onchange_resolution()

@@ -7,6 +7,7 @@
 #ifndef TWI_GB_MEM_H
 #define TWI_GB_MEM_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 //=======================================================================
@@ -45,10 +46,10 @@ enum twi_gb_mem_ctl {
 // TODO: Incomplete. This is a skeleton to get LCD working.
 //=======================================================================
 enum twi_gb_mem_sector {
-	VRAM0, // Video Memory Bank 0 (0x8000-0x9FFF, 8192 bytes)
-	VRAM1, // Video Memory Bank 1 (0x8000-0x9FFF, 8192 bytes) (CGB only)
-	OAM, // Object Attribute Memory (0xFE00-0xFE9F, 160 bytes)
-	CTL, // Control Registers (0xFF00-0xFF7F, 128 bytes)
+	TWI_GB_MEM_SECTOR_VRAM0, // Video Memory Bank 0 (0x8000-0x9FFF, 8192 bytes)
+	TWI_GB_MEM_SECTOR_VRAM1, // Video Memory Bank 1 (0x8000-0x9FFF, 8192 bytes) (CGB only)
+	TWI_GB_MEM_SECTOR_OAM, // Object Attribute Memory (0xFE00-0xFE9F, 160 bytes)
+	TWI_GB_MEM_SECTOR_CTL, // Control Registers (0xFF00-0xFF7F, 128 bytes)
 };
 
 //=======================================================================
@@ -56,10 +57,25 @@ enum twi_gb_mem_sector {
 //       The rest will be implemented later.
 //=======================================================================
 struct twi_gb_mem {
-	uint8_t vram0[8192];
+	_Alignas(max_align_t) uint8_t vram0[8192];
 	uint8_t oam[160];
 	uint8_t ctl[128];
 };
+
+//=======================================================================
+//-----------------------------------------------------------------------
+// External variable declarations
+//-----------------------------------------------------------------------
+//=======================================================================
+
+//=======================================================================
+// decl TWI_GB_MEM_SZ_VRAM
+//
+// The size of a single bank of VRAM.
+// The combined size of both banks of VRAM available to CGB
+// is equal to double this value.
+//=======================================================================
+extern const size_t TWI_GB_MEM_SZ_VRAM;
 
 //=======================================================================
 //-----------------------------------------------------------------------

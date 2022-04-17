@@ -23,6 +23,7 @@
 #ifndef TWI_GB_GB_H
 #define TWI_GB_GB_H
 
+#include <twi/gb/mem.h>
 #include <twi/gb/vid.h>
 
 //=======================================================================
@@ -37,6 +38,7 @@
 // TODO
 //=======================================================================
 struct twi_gb {
+	struct twi_gb_mem mem;
 	struct twi_gb_vid vid;
 }; // end struct twi_gb
 

@@ -58,7 +58,6 @@
 //=======================================================================
 #if TWI_NOASSERT
 # define twi_assertf(...) ((void)0)
-#	define twi_assert_notnull(...) ((void)0)
 #else
 // Checks a condition, and terminates the program with a user-defined
 // error message if the condition equates to false.
@@ -67,10 +66,20 @@
 			TWI_ASSERT_MSG_HANDLER("(" #condition "): " msg, ##__VA_ARGS__); \
 			exit(EXIT_FAILURE); \
 		}
+#endif // if/else TWI_NOASSERT
 
 // Checks a pointer, and terminates the program with a predefined
 // message if the pointer points to NULL.
 #define twi_assert_notnull(ptr) twi_assertf((ptr) != NULL, "`" #ptr "` cannot point to NULL.")
+
+// Checks if the value of the variable on the left is less than
+// the value of the variable on the right.
+// Terminates with a predefined message if the above condition is false.
+#define twi_assert_lt(lhs, rhs) { \
+	long long _lhs = (lhs); \
+	long long _rhs = (rhs); \
+	twi_assertf(_lhs < _rhs, "`" #lhs "` must be less than `" #rhs "` (`" #lhs "` = %lld, `" #rhs "` = %lld).", _lhs, _rhs); \
+}
 
 // Checks if the value of the variable on the left is less than
 // the immediate (numeric constant) value on the right.
@@ -98,6 +107,6 @@
 	long long _immed = (immed); \
 	twi_assertf(_lhs > _immed, "`" #lhs "` must be greater than or equal to %lld (`" #lhs "` = %lld).", _immed, _lhs); \
 }
-#endif // TWI_NOASSERT
+
 #endif // TWI_ASSERT_H
 
