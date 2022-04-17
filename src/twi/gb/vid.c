@@ -314,11 +314,11 @@ twi_gb_vid_draw(struct twi_gb_vid* vid, const struct twi_gb_mem* mem) {
 	twi_assert_notnull(vid);
 	twi_assert_notnull(mem);
 
+	int width, height;
+	SDL_GetWindowSize(vid->window, &width, &height);
 	SDL_GL_MakeCurrent(vid->window, vid->gl);
 	// Update internal GL resolution if it has changed since the last draw.
 	if (vid->flags & RESOLUTION_CHANGED) {
-		int width, height;
-		SDL_GetWindowSize(vid->window, &width, &height);
 		gl_update_res(vid, width, height);
 		vid->flags &= ~RESOLUTION_CHANGED;
 	}
@@ -329,6 +329,7 @@ twi_gb_vid_draw(struct twi_gb_vid* vid, const struct twi_gb_mem* mem) {
 	//glBindFramebuffer(GL_FRAMEBUFFER, vid->fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, vid->fbo);
 	GL_ERRCHECK(glBindFrambuffer, return);
+	glViewport(0, 0, GB_LCD_WIDTH, GB_LCD_HEIGHT);
 	glClear(GL_COLOR_BUFFER_BIT);
 	GL_ERRCHECK(glClear, return);
 	glDrawElements(GL_TRIANGLES, QUAD_NUM_ELEMENTS, GL_UNSIGNED_BYTE, 0);
@@ -338,6 +339,7 @@ twi_gb_vid_draw(struct twi_gb_vid* vid, const struct twi_gb_mem* mem) {
 	// centering the image within the window and maintaining aspect ratio.
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, vid->fbo);
 	GL_ERRCHECK(glBindFramebuffer, return);
+	glViewport(0, 0, width, height);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 	GL_ERRCHECK(glBindFramebuffer, return);
 	glClear(GL_COLOR_BUFFER_BIT);
@@ -556,7 +558,6 @@ gl_strerror(GLenum error_code) {
 //=======================================================================
 static void
 gl_update_res(struct twi_gb_vid* vid, int width, int height) {
-	glViewport(0, 0, width, height);
 	LOGD("Updating resolution to %dx%d.", width, height);
 
 	// Update default framebuffer rendering size to maintain aspect ratio.

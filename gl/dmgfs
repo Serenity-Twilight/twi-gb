@@ -21,46 +21,46 @@ layout (std140) uniform VRAM_block {
 };
 
 void main() {
-//	uint idx = uint(gl_FragCoord.x) / uint(4);
-//	uint val;
-//	switch(uint(gl_FragCoord.x) % uint(4)) {
-//		case uint(0): val = chdata[idx].x; break;
-//		case uint(1): val = chdata[idx].y; break;
-//		case uint(2): val = chdata[idx].z; break;
-//		case uint(3): val = chdata[idx].w; break;
-//	}
-//
-//	float alpha = 1.0f;
-//	
-//	if (val < uint(256)) {
-//		frag_color = vec4(1.0, val / 255.0f, 0.0, alpha);
-//		return;
-//	}
-//	val -= uint(256);
-//	if (val < uint(256)) {
-//		frag_color = vec4(1.0 - (val / 255.0f), 1.0, 0.0, alpha);
-//		return;
-//	}
-//	val -= uint(256);
-//	if (val < uint(256)) {
-//		frag_color = vec4(0.0, 1.0, val / 255.0f, alpha);
-//		return;
-//	}
-//	val -= uint(256);
-//	if (val < uint(256)) {
-//		frag_color = vec4(0.0, 1.0 - (val / 255.0f), 1.0, alpha);
-//		return;
-//	}
-//	val -= uint(256);
-//	if (val < uint(256)) {
-//		frag_color = vec4(val / 255.0f, 0.0, 1.0, alpha);
-//		return;
-//	}
-//	val -= uint(256);
-//	frag_color = vec4(1.0, 0.0, 1.0 - (val / 255.0f), 1.0);
-	if (int(gl_FragCoord.x) % 16 < 8)
-		frag_color = vec4(0.2, 0.2, 0.2, 1.0);
-	else
-		frag_color = vec4(1.0, 1.0, 1.0, 1.0);
+	uint idx = uint(gl_FragCoord.x) / uint(4);
+	uint val;
+	switch(uint(gl_FragCoord.x) % uint(4)) {
+		case uint(0): val = chdata[idx].x; break;
+		case uint(1): val = chdata[idx].y; break;
+		case uint(2): val = chdata[idx].z; break;
+		case uint(3): val = chdata[idx].w; break;
+	}
+
+	float alpha = 0.0f;
+	
+	if (val < uint(256)) {
+		frag_color = vec4(1.0, val / 255.0f, 0.0, alpha);
+		return;
+	}
+	val -= uint(256);
+	if (val < uint(256)) {
+		frag_color = vec4(1.0 - (val / 255.0f), 1.0, 0.0, alpha);
+		return;
+	}
+	val -= uint(256);
+	if (val < uint(256)) {
+		frag_color = vec4(0.0, 1.0, val / 255.0f, alpha);
+		return;
+	}
+	val -= uint(256);
+	if (val < uint(256)) {
+		frag_color = vec4(0.0, 1.0 - (val / 255.0f), 1.0, alpha);
+		return;
+	}
+	val -= uint(256);
+	if (val < uint(256)) {
+		frag_color = vec4(val / 255.0f, 0.0, 1.0, alpha);
+		return;
+	}
+	val -= uint(256);
+	frag_color = vec4(1.0, 0.0, 1.0 - (val / 255.0f), 1.0);
+//	if (int(gl_FragCoord.x) % 16 < 8)
+//		frag_color = vec4(0.2, 0.2, 0.2, 1.0);
+//	else
+//		frag_color = vec4(1.0, 1.0, 1.0, 1.0);
 }
 

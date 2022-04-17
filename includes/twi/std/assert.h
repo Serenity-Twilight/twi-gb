@@ -19,7 +19,12 @@
 // along with the twi standard library.
 // If not, see <https://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------
-// TODO: File description.
+// Provides definitions for assertions which allow for string
+// descriptions to be printed on assertion failure, with support for
+// stdio-like substitution.
+//
+// Additionally, assertions for common checks are provided with
+// pre-written descriptions.
 //-----------------------------------------------------------------------
 //=======================================================================
 #ifndef TWI_ASSERT_H
