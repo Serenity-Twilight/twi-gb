@@ -271,10 +271,6 @@ twi_gb_vid_init(struct twi_gb_vid* vid) {
 	// Initialize framebuffer and its renderbuffer, which will be the target of all
 	// rendering operations and will have its contents blitted to the default
 	// framebuffer in order to render the emulated screen independent of window resolution.
-	// FIXME: When blitting from the renderbuffer framebuffer to the default framebuffer, 
-	// if the default framebuffer's pixel dimensions are smaller than those of the renderbuffer,
-	// then the image doesn't blit properly.
-	// The only way to fix this may be to switch to render-to-texture and texture sampling.
 	glGenFramebuffers(1, &(vid->fbo)); // Framebuffer Object
 	glBindFramebuffer(GL_FRAMEBUFFER, vid->fbo);
 	{	// Create, configure, and attach Renderbuffer Object
