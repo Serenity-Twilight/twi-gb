@@ -707,12 +707,18 @@ static int
 	int status;
 	if (timestamp_error == NULL) {
 		// Print elapsed time to the microsecond.
+		uint_fast64_t sec = (uint64_t)difftime(now.tv_sec, log->epoch.tv_sec);
+		uint_fast32_t nano;
+		if (now.tv_nsec >= log->epoch.tv_nsec)
+			nano = now.tv_nsec - log->epoch.tv_nsec;
+		else {
+			--sec;
+			nano = (now.tv_nsec + 1000000000) - log->epoch.tv_nsec;
+		}
 		errno = 0;
 		if ((status = snprintf(buf, bufsz,
-				"[%lld.%06ld] (%s) %s:%ld: ", // [timestamp] (lvl) fp:lineno:
-				((long long)difftime(now.tv_sec, log->epoch.tv_sec)),
-				(now.tv_nsec - log->epoch.tv_nsec) / 1000,
-				log->levels[lvl].abbrev, fp, lineno
+				"[%" PRIuFAST64 ".%06" PRIuFAST32 "] (%s) %s:%ld: ", // [timestamp] (lvl) fp:lineno:
+				sec, nano / 1000, log->levels[lvl].abbrev, fp, lineno
 		)) < 0) {
 			report_stdio_failure("snprintf() with timestamp", status);
 		}
