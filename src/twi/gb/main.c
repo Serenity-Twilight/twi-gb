@@ -1,14 +1,14 @@
 #include <SDL2/SDL.h>
 #include <twi/gb/gb.h>
 #include <twi/gb/log.h>
-#include <twi/gb/vid.h>
+#include <twi/gb/ppu.h>
 
 int main(int argc, char* argv[]) {
 	twi_gb_log_create();
 	struct twi_gb gb;
-	if (!twi_gb_vid_init(&(gb.vid))) {
+	if (!twi_gb_ppu_init(&(gb.ppu))) {
 		twi_gb_run(&gb);
-		twi_gb_vid_destroy(&(gb.vid));
+		twi_gb_ppu_destroy(&(gb.ppu));
 	}
 	
 //	LOGF("This is a fatal message, id = %d", TWI_GB_LOG_LEVEL_FATAL);

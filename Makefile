@@ -10,7 +10,7 @@ define twi_gb_source
 	log.c
 	main.c
 	mem.c
-	vid.c
+	ppu.c
 endef
 #========================================================================
 # DO NOT MODIFY ANYTHING BELOW THIS POINT

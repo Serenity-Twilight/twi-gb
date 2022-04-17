@@ -56,7 +56,7 @@ twi_gb_run(struct twi_gb* gb) {
 			*((uint32_t*)(gb->mem.vram0 + pos)) = (color_offset + i) % 1536;
 		if ((color_offset += 4) >= 1536)
 			color_offset -= 1536;
-		twi_gb_vid_draw(&(gb->vid), &(gb->mem));
+		twi_gb_ppu_draw(&(gb->ppu), &(gb->mem));
 	} // end infinite loop
 } // end twi_gb_run()
 
@@ -99,8 +99,8 @@ handle_window_event(struct twi_gb* gb, SDL_Event* event) {
 
 	switch (event->window.event) {
 		case SDL_WINDOWEVENT_SIZE_CHANGED:
-			// TODO: twi_assert_eq(event->window.windowID, SDL_GetWindowID(gb->vid.window));
-			twi_gb_vid_onchange_resolution(&(gb->vid));
+			// TODO: twi_assert_eq(event->window.windowID, SDL_GetWindowID(gb->ppu.window));
+			twi_gb_ppu_onchange_resolution(&(gb->ppu));
 			break;
 	} // end determination of specific window event
 } // end handle_window_event()
