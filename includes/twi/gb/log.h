@@ -1,8 +1,25 @@
-//=======================================================================
-//=======================================================================
-// TODO
-// Written by Serenity Twilight
-//=======================================================================
+//======================================================================
+//-----------------------------------------------------------------------
+// Copyright 2022 Serenity Twilight
+//
+// This file is part of twi-gb.
+//
+// twi-gb is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// twi-gb is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+// See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with twi-gb. If not, see <https://www.gnu.org/licenses/>.
+//-----------------------------------------------------------------------
+// Configuration and convenience macros for the application-wide
+// shared log.
+//-----------------------------------------------------------------------
 //=======================================================================
 #ifndef TWI_GB_LOG_H
 #define TWI_GB_LOG_H
@@ -88,7 +105,7 @@ extern struct twi_log* twi_gb_log;
 #	define LOG(...) ((void)0)
 #else
 # define LOG(lvl, msg, ...) \
-	if (twi_gb_log != NULL) {twi_log_write(twi_gb_log, lvl, msg, ##__VA_ARGS__)}
+	if (twi_gb_log != NULL) twi_log_write(twi_gb_log, lvl, msg, ##__VA_ARGS__)
 #endif // end TWI_GB_NOLOG
 
 #if TWI_GB_LOG_NOFATAL
@@ -99,8 +116,16 @@ extern struct twi_log* twi_gb_log;
 
 #if TWI_GB_LOG_NOERROR
 #	define LOGE(...) ((void)0)
+#	define LOGCE(...) ((void)0)
 #else
 # define LOGE(msg, ...) LOG(TWI_GB_LOG_LEVEL_ERROR, msg, ##__VA_ARGS__)
+#	include <errno.h>
+#	include <string.h>
+#	define LOGCE(msg, ...) \
+	if (errno != 0) \
+		LOGE(msg " (%s)", ##__VA_ARGS__, strerror(errno)); \
+	else \
+		LOGE(msg " (no errno)", ##__VA_ARGS__)
 #endif // TWI_GB_LOG_NOERROR
 
 #if TWI_GB_LOG_NOWARN
@@ -143,6 +168,7 @@ extern struct twi_log* twi_gb_log;
 	twi_gb_log_delete(); \
 }
 
+// TODO: Give proper descriptions.
 uint_fast8_t twi_gb_log_create();
 void twi_gb_log_delete();
 

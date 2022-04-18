@@ -1,7 +1,24 @@
 //======================================================================
-//======================================================================
-// includes/twi/std/log.h
+//----------------------------------------------------------------------
+// Copyright 2022 Serenity Twilight
 //
+// This file is part of twi standard library, my own personal library
+// of utilities that I reuse amongst my projects.
+//
+// The twi standard library is free software: you can redistribute it
+// and/or modify it under the terms of the GNU General Public License
+// as published by the Free Software Foundation, either version 3 of
+// the License, or (at your option) any later version.
+//
+// The twi standard library is distributed in the hope that it will be
+// useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+// See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with the twi standard library.
+// If not, see <https://www.gnu.org/licenses/>.
+//----------------------------------------------------------------------
 // A general purpose logging utility with the following features:
 // * Management of up to 32 nonlinear user-defined logging levels,
 //   which can be used to selectively filter out occurences of logging
@@ -18,9 +35,7 @@
 //   line number.
 // * Support for variable substitution in logging messages alike to
 //   the printf family of functions.
-//
-// Written by Serenity Twilight.
-//======================================================================
+//-----------------------------------------------------------------------
 //======================================================================
 #ifndef TWI_LOG_H
 #define TWI_LOG_H
@@ -511,7 +526,7 @@ void
 // sequenuence of substitution pattern present in `msg`.
 //======================================================================
 #define twi_log_write(logptr, lvl, ...) \
-	twi_log_write(logptr, __FILE__, __LINE__, lvl, __VA_ARGS__);
+	twi_log_write(logptr, __FILE__, __LINE__, lvl, __VA_ARGS__)
 void
 (twi_log_write)(
 		struct twi_log* log,

@@ -2,11 +2,15 @@
 # List twi source files to compile and link here.
 define twi_std_source
 	log.c
+	utils.c
 endef
 # List twi_gb source files to compile and link here.
 define twi_gb_source 
+	gb.c
 	log.c
 	main.c
+	mem.c
+	ppu.c
 endef
 #========================================================================
 # DO NOT MODIFY ANYTHING BELOW THIS POINT
@@ -33,9 +37,9 @@ includes_dir = includes
 libs_dir = libs
 
 # Compilation flags
-CFLAGS := -I$(includes_dir) -L$(libs_dir)
-DBG_CFLAGS := -g -DTWI_GB_PROGNAME=\"dtwi-gb\"
-RLS_CFLAGS := -DTWI_GB_NDEBUG -DTWI_GB_PROGNAME=\"twi-gb\"
+CFLAGS := -I$(includes_dir) -L$(libs_dir) $(shell pkgconf --libs sdl2 glew)
+DBG_CFLAGS := -g
+RLS_CFLAGS :=
 
 # If C compiler isn't set, use default of cc.
 CC ?= cc
