@@ -18,7 +18,11 @@
 // along with twi-gb. If not, see <https://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------
 //=======================================================================
+#include <stdint.h>
 #include <twi/gb/cpu.h>
+#include <twi/gb/log.h>
+#include <twi/gb/mem.h>
+#include <twi/std/assert.h>
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -33,10 +37,11 @@
 // be avoided, decreasing verbosity.
 #define CPU_PTR cpu
 
-// Register access macro.
+// 8-bit and 16-bit register access-by-index macros.
 // Provides indirection between register usage and the name of the
 // struct member containing registers, in case the member identifier changes.
-#define REG(i) ((CPU_PTR)->reg[i])
+#define REG8(i) ((CPU_PTR)->reg[i])
+#define REG16(i) (*((uint16_t*)((CPU_PTR)->reg + i)))
 
 // Macros to abstract CPU register access.
 // Registers that the CPU may pair together for specific instructions
@@ -48,29 +53,63 @@
 // 8-bit registers
 #if __BYTE_ORDER__ __ORDER_LITTLE_ENDIAN__
 	// Low order first, high order second
-#	define REG_A REG(1)
-#	define REG_B REG(0)
-#	define REG_C REG(3)
-#	define REG_D REG(2)
-#	define REG_E REG(5)
-#	define REG_F REG(4)
-#	define REG_H REG(7)
-#	define REG_L REG(6)
+#	define REG_A REG8(1)
+#	define REG_B REG8(0)
+#	define REG_C REG8(3)
+#	define REG_D REG8(2)
+#	define REG_E REG8(5)
+#	define REG_F REG8(4)
+#	define REG_H REG8(7)
+#	define REG_L REG8(6)
 #else
 	// High order first, low order second
-#	define REG_A REG(0)
-#	define REG_B REG(1)
-#	define REG_C REG(2)
-#	define REG_D REG(3)
-#	define REG_E REG(4)
-#	define REG_F REG(5)
-#	define REG_H REG(6)
-#	define REG_L REG(7)
+#	define REG_A REG8(0)
+#	define REG_B REG8(1)
+#	define REG_C REG8(2)
+#	define REG_D REG8(3)
+#	define REG_E REG8(4)
+#	define REG_F REG8(5)
+#	define REG_H REG8(6)
+#	define REG_L REG8(7)
 #endif // __BYTE_ORDER__
 
 // 16-bit registers
-#define REG_AB (*((uint16_t*)(&REG(0))))
-#define REG_CD (*((uint16_t*)(&REG(2))))
-#define REG_EF (*((uint16_t*)(&REG(4))))
-#define REG_HL (*((uint16_t*)(&REG(6))))
+#define REG_AB REG16(0)
+#define REG_CD REG16(2)
+#define REG_EF REG16(4)
+#define REG_HL REG16(6)
+
+//=======================================================================
+//-----------------------------------------------------------------------
+// Private function declarations
+//-----------------------------------------------------------------------
+//=======================================================================
+
+//=======================================================================
+//-----------------------------------------------------------------------
+// Public function definitions
+//-----------------------------------------------------------------------
+//=======================================================================
+
+//=======================================================================
+//-----------------------------------------------------------------------
+// Private function definitions
+//-----------------------------------------------------------------------
+//=======================================================================
+
+//=======================================================================
+// decl interpret()
+// def interpret()
+// TODO: Description
+//=======================================================================
+static inline int_fast8_t
+interpret(
+		struct twi_gb_cpu* restrict cpu,
+		struct twi_gb_mem* restrict mem,
+		int64_t* restrict remaining_time
+) {
+	twi_assert_notnull(cpu);
+	twi_assert_notnull(mem);
+	twi_assert_notnull(remaining_time);
+}; // end interpret()
 
