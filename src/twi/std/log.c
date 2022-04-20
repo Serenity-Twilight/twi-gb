@@ -32,7 +32,7 @@
 #include <string.h>
 #include <time.h>
 
-#include <twi/std/assert.h>
+#include <twi/std/assertf.h>
 #include <twi/std/log.h>
 #include <twi/std/status.h>
 

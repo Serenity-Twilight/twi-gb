@@ -22,7 +22,7 @@
 #include <twi/gb/cpu.h>
 #include <twi/gb/log.h>
 #include <twi/gb/mem.h>
-#include <twi/std/assert.h>
+#include <twi/std/assertf.h>
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -30,10 +30,12 @@
 //-----------------------------------------------------------------------
 //=======================================================================
 
+//=======================================================================
 // Identifiers of the pointers to memory used by the CPU intreter.
 // In exchange for enforcing specific identifiers for these pointers,
 // they need not be passed to macro functions, thus decreasing the
 // verbosity of the interpreter.
+//=======================================================================
 #define CPU_PTR (cpu) // Pointer to twi-gb-cpu
 #define MEM_PTR (mem) // Pointer to twi-gb-mem
 #define PROG_PTR (program) // Pointer to GB program code
@@ -42,14 +44,15 @@
 // Macros providing abbreviated signatures for common read/write/access
 // operations to and from registers, immediates, and memory.
 //=======================================================================
-// Access 8-bit register
+// Access 8-bit or 16-bit register
+// These macros exists primarily for defining special macros for each
+// individual register. Use those macros (defined later) whenever possible.
 #define REG8(i) (CPU_PTR->reg[i])
-// Access 16-bit register
 #define REG16(i) (*((uint16_t*)(CPU_PTR->reg + i)))
 // Read 8-bit memory
-#define READ8(addr) (twi_gb_mem_read8(MEM_PTR, addr))
+#define RMEM8(addr) (twi_gb_mem_read8(MEM_PTR, addr))
 // Write 8-bit memory
-#define WRITE8(addr, val) (twi_gb_mem_write8(MEM_PTR, addr, val))
+#define WMEM8(addr, val) (twi_gb_mem_write8(MEM_PTR, addr, val))
 // Read unsigned 8-bit immediate
 #define IMMED8 (*(PROG_PTR + (CPU_PTR)->pc + 1))
 // Read unsigned 16-bit immediate
@@ -162,11 +165,35 @@
 // * ret: The return value at the end of each case statement.
 //=======================================================================
 
-// Shortcut macro for use in CASESET_7R, described below.
-// * i: The number of `stride`s after `offset` of the case's integral trigger.
-// * rhs: The right-hand side argument to pass to the operation function.
-#define CASE_7R(i, r) \
+// A macro which writes `val` to the register `reg`.
+// This is intended for use specifically with case sets, so they be
+// instructed on how to set the register, versus setting memory.
+// If you intend to write to registers outside of case sets, use the
+// standard register access (R/W) macros defined above.
+#define WREG8(reg, val) ((reg) = (val))
+
+// Defines the return conditions of any operation which modifies memory
+// via a pointer stored in HL.
+// 0xFFFF is the location of the interrupt enable (IE) register.
+// If this address is written to, active interrupts will have to be
+// re-evaluted to know when to next preempt the CPU.
+#define HLM_RETURN ((REG_HL == 0xFFFF) ? -1 : 0)
+
+// Macros for defining CASESET macros.
+// i: The offset from `offset`, multiplied by `stride`.
+// r: The 8-bit register used as the RHS argument.
+// rr: The 16-bit register used as the RHS argument.
+// Other arguments not defined here are defined by CASESET macros.
+// Notes:
+// * The offset of RRM operations are always 6 * `stride` from offset.
+// * The offset of N operations are inconsistent between instructions,
+//   and thus are provided via another argument: `n_offset`.
+#define CASE_R(i, r) \
 	case offset + (stride * i): set(lhs, op(lhs, rhs)); ADV(cyc, 1); return (ret)
+#define CASE_RRM(rr) \
+	case offset + (stride * 6): set(lhs, op(lhs, RMEM8(rr))); ADV(HLM_cyc, 1); return (ret)
+#define CASE_N \
+	case n_offset: set(lhs, op(lhs, IMMED8)); ADV(n_cyc, 2); return (ret)
 
 // Defines 7 switch cases, in which the right-hand side arguments
 // appear in the following order:
@@ -175,31 +202,37 @@
 // offset + (stride * 6) is skipped when enumerating cases,
 // due to the opcodes used by instructions which follow this pattern.
 #define CASESET_7R(offset, stride, op, set, lhs, cyc, ret) \
-	CASE_7R(0, REG_B); \
-	CASE_7R(1, REG_C); \
-	CASE_7R(2, REG_D); \
-	CASE_7R(3, REG_E); \
-	CASE_7R(4, REG_H); \
-	CASE_7R(5, REG_L); \
-	CASE_7R(7, REG_A)
+	CASE_R(0, REG_B); \
+	CASE_R(1, REG_C); \
+	CASE_R(2, REG_D); \
+	CASE_R(3, REG_E); \
+	CASE_R(4, REG_H); \
+	CASE_R(5, REG_L); \
+	CASE_R(7, REG_A)
+
+// Same as CASESET_7R(), but handles an additional opcode at `n_offset`,
+// for when the RHS value originates from an unsigned 8-bit immediate.
+#define CASESET_7RN(offset, stride, n_offset, op, set, lhs, cyc, n_cyc, ret) \
+	CASESET_7R(offset, stride, op, set, lhs, cyc, ret); \
+	CASE_N
 
 // Same as CASESET_7R(), but handles an additional opcode at offset + (stride * 6)
 // when the RHS value originates from memory pointed to by the value of REG_HL.
 #define CASESET_7RHLM(offset, stride, op, set, lhs, cyc, HLM_cyc, ret) \
 	CASESET_7R(offset, stride, op, set, lhs, cyc, ret); \
-	case offset + (stride * 6): set(lhs, op(lhs, READ8(REG_HL))); ADV(HLM_cyc, 1); return (ret)
+	CASE_RRM(REG_HL)
 
 // Same as CASESET_7RHLMN(), but handles an additional opcode at n_offset,
 // for when the RHS value originates from an unsigned 8-bit immediate.
 #define CASESET_7RHLMN(offset, stride, n_offset, op, set, lhs, cyc, HLM_cyc, n_cyc, ret) \
 	CASESET_7RHLM(offset, stride, op, set, lhs, cyc, HLM_cyc, ret); \
-	case n_offset: set(lhs, op(lhs, IMMED8)); ADV(n_cyc, 2); return (ret)
+	CASE_N
 
 // Shortcut macro for the implementation of CASESET_8B, defined below.
 // * b: The number of strides after offset of the case's integral trigger.
 //   as well as the bit offset used as the second argument of op().
 #define CASE_8B(b) \
-	case offset + (stride * (b)): op(lhs, b); ADV(cyc, 2); return (ret)
+	case offset + (stride * (b)): set(lhs, op(lhs, b)); ADV(cyc, 2); return (ret)
 
 // Defines 8 switch cases, in which the right hand arguments are bit
 // offset of the `lhs` argument, from lowest-to-highest order:
@@ -207,7 +240,7 @@
 //
 // Note that the `set` argument is not present in this macro.
 // As such, the `op` argument will be responsible for assignment of the result.
-#define CASESET_8B(offset, stride, op, set, lhs, cyc, ret) \
+#define CASESET_8B(offset, stride, op, lhs, cyc, ret) \
 	CASE_8B(0); \
 	CASE_8B(1); \
 	CASE_8B(2); \
@@ -217,7 +250,28 @@
 	CASE_8B(6); \
 	CASE_8B(7)
 
-#define CASESET_7RHLM_8B(offset, op, cyc, HLM_cyc, ret, HLM_ret) ((void)0) // TODO
+// Defines cases for all 64 permutations of an operation with
+// Either one of the 7 8-bit registers (not F) or HL as the LHS argument,
+// and a bit offset of 0-7 as the RHS argument.
+//
+// Note the following:
+// * No `stride` argument is taken as the stride for all operations with
+//   this opcode pattern is the same.
+// * As operations with bit offset arguments may perform both a read and
+//   a write on the LHS argument, an alternate op function is required when
+//   interacting with the memory pointed to by HL (defined by `HLM_op`).
+// * No return for non-HLM operations is accepted, as non-HLM operations
+//   never modify memory, and therefore never prompt re-evaluation of
+//   active interrupts. All non-HLM operations return 0.
+#define CASESET_7RHLM_8B(offset, op, HLM_op, cyc, HLM_cyc, HLM_ret) \
+	CASESET_8B(offset      , 0x8, op, REG_B, cyc, 0); \
+	CASESET_8B(offset + 0x1, 0x8, op, REG_C, cyc, 0); \
+	CASESET_8B(offset + 0x2, 0x8, op, REG_D, cyc, 0); \
+	CASESET_8B(offset + 0x3, 0x8, op, REG_E, cyc, 0); \
+	CASESET_8B(offset + 0x4, 0x8, op, REG_H, cyc, 0); \
+	CASESET_8B(offset + 0x5, 0x8, op, REG_L, cyc, 0); \
+	CASESET_8B(offset + 0x6, 0x8, HLM_op, REG_HL, HLM_cyc, HLM_ret); \
+	CASESET_8B(offset + 0x7, 0x8, op, REG_A, cyc, 0)
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -253,6 +307,14 @@ interpret_once(
 	twi_assert_notnull(program);
 
 	switch (program[cpu->pc]) {
+		CASESET_7RHLMN(0x40, 0x1, 0x06, LD, WREG8, REG_B, 4, 8, 8, 0); // LD B, r|(HL)|n
+		CASESET_7RHLMN(0x48, 0x1, 0x0E, LD, WREG8, REG_C, 4, 8, 8, 0); // LD C, r|(HL)|n
+		CASESET_7RHLMN(0x50, 0x1, 0x16, LD, WREG8, REG_D, 4, 8, 8, 0); // LD D, r|(HL)|n
+		CASESET_7RHLMN(0x58, 0x1, 0x1E, LD, WREG8, REG_E, 4, 8, 8, 0); // LD E, r|(HL)|n
+		CASESET_7RHLMN(0x60, 0x1, 0x26, LD, WREG8, REG_H, 4, 8, 8, 0); // LD H, r|(HL)|n
+		CASESET_7RHLMN(0x68, 0x1, 0x2E, LD, WREG8, REG_L, 4, 8, 8, 0); // LD L, r|(HL)|n
+		CASESET_7RN(0x70, 0x1, 0x36, LD, WMEM8, REG_HL, 4, 8, HLM_RETURN); // LD (HL), r|n
+		CASESET_7RHLMN(0x78, 0x1, 0x3E, LD, WREG8, REG_A, 4, 8, 8, 0); // LD A, r|(HL)|n
 	} // end operation lookup
 }; // end interpret_once()
 

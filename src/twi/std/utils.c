@@ -28,7 +28,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <twi/std/assert.h>
+#include <twi/std/assertf.h>
 #include <twi/std/utils.h>
 
 //======================================================================

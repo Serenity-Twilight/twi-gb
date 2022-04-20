@@ -19,7 +19,7 @@
 //-----------------------------------------------------------------------
 //=======================================================================
 #include <stdint.h>
-#include <twi/std/assert.h>
+#include <twi/std/assertf.h>
 #include <twi/gb/log.h>
 #include <twi/gb/mem.h>
 

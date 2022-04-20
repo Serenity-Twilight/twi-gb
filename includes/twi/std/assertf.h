@@ -27,8 +27,8 @@
 // pre-written descriptions.
 //-----------------------------------------------------------------------
 //=======================================================================
-#ifndef TWI_ASSERT_H
-#define TWI_ASSERT_H
+#ifndef TWI_ASSERTF_H
+#define TWI_ASSERTF_H
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -42,14 +42,24 @@
 // followed by a list of variadic arguments for the format string,
 // alike to the printf family of functions.
 //
-// Note that the message handler will always be immediately followed by
-// a call to `exit()` with value `EXIT_FAILURE` and should not attempt
-// to circumvent this behavior.
+// Note that the message handler will always be followed by the
+// TWI_ASSERT_ACTION, and should not attempt to circumvent this
+// behavior. Users wanting to customize the action taken by the
+// program on assertion failure should define a TWI_ASSERT_ACTION
+// macro.
 //=======================================================================
 #ifndef TWI_ASSERT_MSG_HANDLER
 #	define TWI_ASSERT_MSG_HANDLER(msg, ...) \
 		fprintf(stderr, "Assertion failure\n" __FILE__ ":%s():%ld\n" msg "\n", __func__, __LINE__, ##__VA_ARGS__)
 #endif
+
+//=======================================================================
+// Programs which include this header may implement their own assertion
+// failure action.
+//=======================================================================
+#ifndef TWI_ASSERT_ACTION
+#	define TWI_ASSERT_ACTION exit(EXIT_FAILURE)
+#endif // TWI_ASSERT_ACTION
 
 //=======================================================================
 // The following are macros for asserting the correctness of code.
@@ -69,7 +79,7 @@
 #	define twi_assertf(condition, msg, ...) \
 		if (!(condition)) { \
 			TWI_ASSERT_MSG_HANDLER("(" #condition "): " msg, ##__VA_ARGS__); \
-			exit(EXIT_FAILURE); \
+			TWI_ASSERT_ACTION; \
 		}
 #endif // if/else TWI_NOASSERT
 
@@ -113,5 +123,15 @@
 	twi_assertf(_lhs > _immed, "`" #lhs "` must be greater than or equal to %lld (`" #lhs "` = %lld).", _immed, _lhs); \
 }
 
-#endif // TWI_ASSERT_H
+// An assertion designed to be used for automated testing.
+// Accepts four arguments following the condition:
+// * type: A string containing the format specifier for printing the expected and actual values.
+// * expected: The expected value.
+// * actual: The actual value.
+#define twi_assert_test(condition, type, expected, actual) { \
+	const char* _type = type; \
+	twi_assertf(condition, "Expected value: %" _type "; Actual value: %" _type, expected, actual); \
+}
+
+#endif // TWI_ASSERTF_H
 

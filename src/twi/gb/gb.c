@@ -25,7 +25,7 @@
 #include <SDL2/SDL_video.h>
 #include <twi/gb/gb.h>
 #include <twi/gb/log.h>
-#include <twi/std/assert.h>
+#include <twi/std/assertf.h>
 
 //=======================================================================
 //-----------------------------------------------------------------------
