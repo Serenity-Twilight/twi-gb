@@ -100,6 +100,13 @@ extern const size_t TWI_GB_MEM_SZ_VRAM;
 //=======================================================================
 
 //=======================================================================
+// decl twi_gb_mem_read8()
+// TODO
+//=======================================================================
+uint8_t
+twi_gb_mem_read8(const struct twi_gb_mem* mem, uint16_t addr);
+
+//=======================================================================
 // decl twi_gb_mem_read_sector()
 //
 // Provides a readonly pointer to the sector of the memory map

@@ -37,19 +37,26 @@
 // decl struct twi_gb_cpu
 // def struct twi_gb_cpu
 //
-// Maintains the necessary state to emulate a GB CPU.
+// Contains the state of a twi-gb CPU instance.
 //-----------------------------------------------------------------------
 // Members (ALL INTERNAL):
 // * reg: The 8 8-bit, general-purpose registers of the twi-gb CPU:
-//   A, B, C, D, E, F, H, L
-//   Additionally, the pairs of AB, CD, EF, and HL will be utilized by
+//   A, F, B, C, D, E, H, L
+//   Additionally, the pairs of AF, BC, DE, and HL are utilized by
 //   specific instructions, forming effective 16-bit registers.
 //   Hence the need for 16-bit alignment.
 //   In these cases, the endianness of each 16-bit register pair is
-//   Big Endian with regards to its name (HL, H = High, L = Low).
+//   Big Endian with regards to its name (Ex: HL, H = High, L = Low).
+//
+//   Represented via an array as its the only standard way to guarantee
+//   no padding between variables, thus faciliating their usage as 8-bit
+//   registers and 16-bit register pairs.
 //=======================================================================
 struct twi_gb_cpu {
 	_Alignas(uint16_t) uint8_t reg[8];
+	uint16_t sp;
+	uint16_t pc;
+	uint16_t div;
 }; // end struct twi_gb_cpu
 
 //=======================================================================
