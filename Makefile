@@ -12,25 +12,41 @@ define twi_gb_source
 	mem.c
 	ppu.c
 endef
+# List all testing files for twi-gb to compile and link here.
+define twi_gb_test
+	cpu.c
+	main.c
+endef
+# List all twi-gb source files which are required for the testing binary
+# to link.
+define twi_gb_test_src
+	log.c
+	mem.c
+endef
 #========================================================================
 # DO NOT MODIFY ANYTHING BELOW THIS POINT
 # UNLESS YOU KNOW EXACTLY WHAT YOU ARE DOING!
 #========================================================================
-
-# Build list of sources with full directories from source variables
-# above.
-define src_files := 
-	$(addprefix src/twi/std/,$(twi_std_source))
-	$(addprefix src/twi/gb/,$(twi_gb_source))
+# Fully expand twi-std directories.
+std_files := $(addprefix src/twi/std/,$(twi_std_source))
+# Fully expand debug and release source files, include std files.
+src_files := $(addprefix src/twi/gb/,$(twi_gb_source)) $(std_files)
+# Fully expand testing source files, include std files.
+define test_files := 
+	$(addprefix src/twi/gb/test/,$(twi_gb_test))
+	$(addprefix src/twi/gb/,$(twi_gb_test_src))
+	$(std_files)
 endef
 
 # Debug object files
 dobj_files := $(patsubst src/%.c,dobj/%.o,$(src_files))
 # Release object files
 obj_files := $(patsubst src/%.c,obj/%.o,$(src_files))
+# Test object files
+tobj_files := $(patsubst src/%.c,tobj/%.o,$(test_files))
 
-# Debug and release make files.
-make_files := $(patsubst src/%.c,make/%.mk,$(src_files))
+# Make files, which track what each source file depends on to build.
+make_files := $(patsubst src/%.c,make/%.mk,$(src_files) $(test_files))
 
 # Directories
 includes_dir = includes
@@ -78,6 +94,22 @@ dobj/%.o:
 	$(CC) -c $(CFLAGS) $(DBG_CFLAGS) src/$*.c -o $@
 
 #========================================================================
+# TEST RULES
+#========================================================================
+t: test
+tst: test
+test: ttwi-gb
+
+# Link test binary
+ttwi-gb ttwi-gb.exe: $(tobj_files)
+	$(CC) $(CFLAGS) $(DBG_CFLAGS) $(tobj_files) -o $@
+
+# Compile test object files
+tobj/%.o:
+	@mkdir -p $(@D)
+	$(CC) -c $(CFLAGS) $(DBG_CFLAGS) src/$*.c -o $@
+
+#========================================================================
 # Uses specified C compiler to generate a makefile (.mk) for the object
 # file to-be-created from the prerequisite source file.
 # This resulting makefile contains a single rule with the debug and
@@ -87,17 +119,18 @@ dobj/%.o:
 
 make/%.mk: src/%.c
 	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -MM -MT "dobj/$*.o obj/$*.o" -MF $@ $^
+	$(CC) $(CFLAGS) -MM -MT "dobj/$*.o obj/$*.o tobj/$*.o" -MF $@ $^
 #========================================================================
 
 #========================================================================
 # Deletes all automatically-generated files.
 .PHONY: clean
 clean:
-	rm -rf dobj obj dmake make dtwi-gb dtwi-gb.exe twi-gb twi-gb.exe
+	rm -rf tobj dobj obj make ttwi-gb ttwi-gb.exe dtwi-gb dtwi-gb.exe twi-gb twi-gb.exe
 #========================================================================
 
 # Include all automatically-generated makefiles.
 # This is done below all rules to ensure that included rules will never
 # be the default rules.
 include $(make_files)
+

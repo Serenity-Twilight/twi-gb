@@ -38,7 +38,7 @@
 //=======================================================================
 #define CPU_PTR (cpu) // Pointer to twi-gb-cpu
 #define MEM_PTR (mem) // Pointer to twi-gb-mem
-#define PROG_PTR (program) // Pointer to GB program code
+#define PROG_PTR (prog) // Pointer to GB program code
 
 //=======================================================================
 // Macros providing abbreviated signatures for common read/write/access
@@ -179,22 +179,6 @@
 // re-evaluted to know when to next preempt the CPU.
 #define HLM_RETURN ((REG_HL == 0xFFFF) ? -1 : 0)
 
-// Macros for defining CASESET macros.
-// i: The offset from `offset`, multiplied by `stride`.
-// r: The 8-bit register used as the RHS argument.
-// rr: The 16-bit register used as the RHS argument.
-// Other arguments not defined here are defined by CASESET macros.
-// Notes:
-// * The offset of RRM operations are always 6 * `stride` from offset.
-// * The offset of N operations are inconsistent between instructions,
-//   and thus are provided via another argument: `n_offset`.
-#define CASE_R(i, r) \
-	case offset + (stride * i): set(lhs, op(lhs, rhs)); ADV(cyc, 1); return (ret)
-#define CASE_RRM(rr) \
-	case offset + (stride * 6): set(lhs, op(lhs, RMEM8(rr))); ADV(HLM_cyc, 1); return (ret)
-#define CASE_N \
-	case n_offset: set(lhs, op(lhs, IMMED8)); ADV(n_cyc, 2); return (ret)
-
 // Defines 7 switch cases, in which the right-hand side arguments
 // appear in the following order:
 // REG_B, REG_C, REG_D, REG_E, REG_H, REG_L, REG_A
@@ -202,31 +186,31 @@
 // offset + (stride * 6) is skipped when enumerating cases,
 // due to the opcodes used by instructions which follow this pattern.
 #define CASESET_7R(offset, stride, op, set, lhs, cyc, ret) \
-	CASE_R(0, REG_B); \
-	CASE_R(1, REG_C); \
-	CASE_R(2, REG_D); \
-	CASE_R(3, REG_E); \
-	CASE_R(4, REG_H); \
-	CASE_R(5, REG_L); \
-	CASE_R(7, REG_A)
+	case offset               : set(lhs, op(lhs, REG_B)); ADV(cyc, 1); return (ret); \
+	case offset + stride      : set(lhs, op(lhs, REG_C)); ADV(cyc, 1); return (ret); \
+	case offset + (stride * 2): set(lhs, op(lhs, REG_D)); ADV(cyc, 1); return (ret); \
+	case offset + (stride * 3): set(lhs, op(lhs, REG_E)); ADV(cyc, 1); return (ret); \
+	case offset + (stride * 4): set(lhs, op(lhs, REG_H)); ADV(cyc, 1); return (ret); \
+	case offset + (stride * 5): set(lhs, op(lhs, REG_L)); ADV(cyc, 1); return (ret); \
+	case offset + (stride * 7): set(lhs, op(lhs, REG_A)); ADV(cyc, 1); return (ret)
 
 // Same as CASESET_7R(), but handles an additional opcode at `n_offset`,
 // for when the RHS value originates from an unsigned 8-bit immediate.
 #define CASESET_7RN(offset, stride, n_offset, op, set, lhs, cyc, n_cyc, ret) \
 	CASESET_7R(offset, stride, op, set, lhs, cyc, ret); \
-	CASE_N
+	case n_offset: set(lhs, op(lhs, IMMED8)); ADV(n_cyc, 2); return (ret)
 
 // Same as CASESET_7R(), but handles an additional opcode at offset + (stride * 6)
 // when the RHS value originates from memory pointed to by the value of REG_HL.
 #define CASESET_7RHLM(offset, stride, op, set, lhs, cyc, HLM_cyc, ret) \
 	CASESET_7R(offset, stride, op, set, lhs, cyc, ret); \
-	CASE_RRM(REG_HL)
+	case offset + (stride * 6): set(lhs, op(lhs, RMEM8(REG_HL))); ADV(HLM_cyc, 1); return (ret)
 
 // Same as CASESET_7RHLMN(), but handles an additional opcode at n_offset,
 // for when the RHS value originates from an unsigned 8-bit immediate.
 #define CASESET_7RHLMN(offset, stride, n_offset, op, set, lhs, cyc, HLM_cyc, n_cyc, ret) \
 	CASESET_7RHLM(offset, stride, op, set, lhs, cyc, HLM_cyc, ret); \
-	CASE_N
+	case n_offset: set(lhs, op(lhs, IMMED8)); ADV(n_cyc, 2); return (ret)
 
 // Shortcut macro for the implementation of CASESET_8B, defined below.
 // * b: The number of strides after offset of the case's integral trigger.
@@ -300,21 +284,23 @@ static inline int_fast8_t
 interpret_once(
 		struct twi_gb_cpu* restrict cpu,
 		struct twi_gb_mem* mem,
-		const uint8_t* program
+		const uint8_t* prog
 ) {
 	twi_assert_notnull(cpu);
 	twi_assert_notnull(mem);
-	twi_assert_notnull(program);
+	twi_assert_notnull(prog);
 
-	switch (program[cpu->pc]) {
+	switch (prog[cpu->pc]) {
 		CASESET_7RHLMN(0x40, 0x1, 0x06, LD, WREG8, REG_B, 4, 8, 8, 0); // LD B, r|(HL)|n
 		CASESET_7RHLMN(0x48, 0x1, 0x0E, LD, WREG8, REG_C, 4, 8, 8, 0); // LD C, r|(HL)|n
 		CASESET_7RHLMN(0x50, 0x1, 0x16, LD, WREG8, REG_D, 4, 8, 8, 0); // LD D, r|(HL)|n
 		CASESET_7RHLMN(0x58, 0x1, 0x1E, LD, WREG8, REG_E, 4, 8, 8, 0); // LD E, r|(HL)|n
 		CASESET_7RHLMN(0x60, 0x1, 0x26, LD, WREG8, REG_H, 4, 8, 8, 0); // LD H, r|(HL)|n
 		CASESET_7RHLMN(0x68, 0x1, 0x2E, LD, WREG8, REG_L, 4, 8, 8, 0); // LD L, r|(HL)|n
-		CASESET_7RN(0x70, 0x1, 0x36, LD, WMEM8, REG_HL, 4, 8, HLM_RETURN); // LD (HL), r|n
+		CASESET_7RN(0x70, 0x1, 0x36, LD, WMEM8, REG_HL, 8, 12, HLM_RETURN); // LD (HL), r|n
 		CASESET_7RHLMN(0x78, 0x1, 0x3E, LD, WREG8, REG_A, 4, 8, 8, 0); // LD A, r|(HL)|n
 	} // end operation lookup
+	
+	return 0;
 }; // end interpret_once()
 

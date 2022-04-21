@@ -123,15 +123,5 @@
 	twi_assertf(_lhs > _immed, "`" #lhs "` must be greater than or equal to %lld (`" #lhs "` = %lld).", _immed, _lhs); \
 }
 
-// An assertion designed to be used for automated testing.
-// Accepts four arguments following the condition:
-// * type: A string containing the format specifier for printing the expected and actual values.
-// * expected: The expected value.
-// * actual: The actual value.
-#define twi_assert_test(condition, type, expected, actual) { \
-	const char* _type = type; \
-	twi_assertf(condition, "Expected value: %" _type "; Actual value: %" _type, expected, actual); \
-}
-
 #endif // TWI_ASSERTF_H
 

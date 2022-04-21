@@ -104,7 +104,10 @@ extern const size_t TWI_GB_MEM_SZ_VRAM;
 // TODO
 //=======================================================================
 uint8_t
-twi_gb_mem_read8(const struct twi_gb_mem* mem, uint16_t addr);
+twi_gb_mem_read8(const struct twi_gb_mem* restrict mem, uint16_t addr);
+
+void
+twi_gb_mem_write8(struct twi_gb_mem* restrict mem, uint16_t addr, uint8_t val);
 
 //=======================================================================
 // decl twi_gb_mem_read_sector()
