@@ -17,14 +17,13 @@
 // You should have received a copy of the GNU General Public License
 // along with twi-gb. If not, see <https://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------
-// Definitions of types common through the program go here.
+// Definition of twi-gb-mode. 
 //-----------------------------------------------------------------------
 //=======================================================================
-#ifndef TWI_GB_COMMON_H
-#define TWI_GB_COMMON_H
+#ifndef TWI_GB_MODE_H
+#define TWI_GB_MODE_H
 
 //=======================================================================
-// decl enum twi_gb_mode
 // def enum twi_gb_mode
 //
 // Indicator for what model of Game Boy is being emulated.
@@ -33,5 +32,5 @@
 //=======================================================================
 enum twi_gb_mode { TWI_GB_MODE_DMG, TWI_GB_MODE_CGB };
 
-#endif // TWI_GB_COMMON_H
+#endif // TWI_GB_MODE_H
 
