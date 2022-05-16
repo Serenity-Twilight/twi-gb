@@ -1,11 +1,14 @@
 #include <SDL2/SDL.h>
 #include <twi/gb/gb.h>
 #include <twi/gb/log.h>
+#include <twi/gb/mem.h>
+#include <twi/gb/mode.h>
 #include <twi/gb/ppu.h>
 
 int main(int argc, char* argv[]) {
 	twi_gb_log_create();
 	struct twi_gb gb;
+	twi_gb_mem_init(&(gb.mem), NULL, NULL, TWI_GB_MODE_DMG);
 	if (!twi_gb_ppu_init(&(gb.ppu))) {
 		twi_gb_run(&gb);
 		twi_gb_ppu_destroy(&(gb.ppu));

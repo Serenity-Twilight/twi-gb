@@ -48,12 +48,13 @@ void
 twi_gb_run(struct twi_gb* gb) {
 	struct timespec slp_time = {.tv_sec=0, .tv_nsec=15000000L};
 	size_t color_offset = 0;
+	uint8_t* vram = (uint8_t*)twi_gb_mem_read_sector(&(gb->mem), TWI_GB_MEM_SECTOR_VRAM);
 	for (;;) {
 		thrd_sleep(&slp_time, NULL);
 		if (!handle_events(gb))
 			return;
 		for (size_t i = 0, pos = 0; i < 160; ++i, pos += 4)
-			*((uint32_t*)(gb->mem.vram0 + pos)) = (color_offset + i) % 1536;
+			*((uint32_t*)(vram + pos)) = (color_offset + i) % 1536;
 		if ((color_offset += 4) >= 1536)
 			color_offset -= 1536;
 		twi_gb_ppu_draw(&(gb->ppu), &(gb->mem));
