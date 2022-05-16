@@ -745,7 +745,7 @@ gl_update_ubo(
 	// How the data is copied into the buffer is also specific to mode.
 	switch(ubomode) {
 		case UBOMODE_DMGVRAM:
-			memcpy(buf, twi_gb_mem_read_sector(mem, TWI_GB_MEM_SECTOR_VRAM0), size);
+			memcpy(buf, twi_gb_mem_read_sector(mem, TWI_GB_MEM_SECTOR_VRAM), size);
 			break;
 		case UBOMODE_CGBVRAM:
 			twi_assertf(0, "CBG rendering not yet implemented.");
