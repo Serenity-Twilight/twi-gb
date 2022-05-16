@@ -18,7 +18,9 @@
 // along with twi-gb. If not, see <https://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------
 //=======================================================================
+#include <inttypes.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <twi/gb/cpu.h>
 #include <twi/gb/log.h>
 #include <twi/gb/mem.h>
@@ -31,14 +33,12 @@
 //=======================================================================
 
 //=======================================================================
-// Identifiers of the pointers to memory used by the CPU intreter.
-// In exchange for enforcing specific identifiers for these pointers,
-// they need not be passed to macro functions, thus decreasing the
-// verbosity of the interpreter.
+// Aliases for the twi-gb-cpu and twi-gb-mem arguments of the interpreter.
+// Allows for interpreter macros to be used in contexts with different
+// variable names/types. Primarily useful in testing.
 //=======================================================================
-#define CPU_PTR (cpu) // Pointer to twi-gb-cpu
-#define MEM_PTR (mem) // Pointer to twi-gb-mem
-#define PROG_PTR (prog) // Pointer to GB program code
+#define CPU_PTR (cpu)
+#define MEM (*mem)
 
 //=======================================================================
 // Macros providing abbreviated signatures for common read/write/access
@@ -47,24 +47,24 @@
 // Access 8-bit or 16-bit register
 // These macros exists primarily for defining special macros for each
 // individual register. Use those macros (defined later) whenever possible.
-#define REG8(i) (CPU_PTR->reg[i])
-#define REG16(i) (*((uint16_t*)(CPU_PTR->reg + i)))
+#define REG8(cpu_ptr, idx) ((cpu_ptr)->reg[idx])
+#define REG16(cpu_ptr, idx) (*((uint16_t*)((cpu_ptr)->reg + (idx))))
 // Read 8-bit memory
-#define RMEM8(addr) (twi_gb_mem_read8(MEM_PTR, addr))
+#define RMEM8(addr) twi_gb_mem_read8(&MEM, addr)
 // Write 8-bit memory
-#define WMEM8(addr, val) (twi_gb_mem_write8(MEM_PTR, addr, val))
+#define WMEM8(addr, val) twi_gb_mem_write8(&MEM, addr, val)
 // Read unsigned 8-bit immediate
-#define IMMED8 (*(PROG_PTR + (CPU_PTR)->pc + 1))
+#define IMMED8 (RMEM8((CPU_PTR)->pc + 1))
 // Read unsigned 16-bit immediate
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 	// Program memory is in little endian format.
 	// Construct the value manually, independent of endianness.
-#	define IMMED16 (PROG_PTR[CPU_PTR->pc + 1] | (((uint16_t)(PROG_PTR[CPU_PTR->pc + 2])) << 8))
+#	define IMMED16 (RMEM8((CPU_PTR)->pc + 1) | (((uint16_t)(RMEM((CPU_PTR)->pc + 1))) << 8))
 #else // Little endian (and hopefully not mixed endian)
-#	define IMMED16 (*((uint16_t*)(PROG_PTR + CPU_PTR->pc + 1)))
+#	define IMMED16 (*((uint16_t*)(PROG_PTR + (CPU_PTR)->pc + 1))) // TODO
 #endif // __BYTE_ORDER__
 // Read signed 8-bit immediate
-#define IMMEDs8 (*((int8_t*)(PROG_PTR + CPU_PTR->pc + 1)))
+#define IMMEDs8 (*((int8_t*)(PROG_PTR + (CPU_PTR)->pc + 1))) // TODO
 
 //=======================================================================
 // Macros to abstract CPU register access.
@@ -75,45 +75,53 @@
 // and the second is, then, the lower order register.
 //=======================================================================
 
-// 8-bit registers
+// 8-bit register indices
+// Register order is dependent on host endianness, to correctly emulate
+// the endianness of 16-bit register pairs.
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 	// High order first, low order second
-#	define REG_A REG8(0)
-#	define REG_F REG8(1)
-#	define REG_B REG8(2)
-#	define REG_C REG8(3)
-#	define REG_D REG8(4)
-#	define REG_E REG8(5)
-#	define REG_H REG8(6)
-#	define REG_L REG8(7)
-#else // Little endian (and hopefully not mixed endian)
+#	define IDX_A 0
+#	define IDX_F 1
+#	define IDX_B 2
+#	define IDX_C 3
+#	define IDX_D 4
+#	define IDX_E 5
+#	define IDX_H 6
+#	define IDX_L 7
+#else // __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__
 	// Low order first, high order second
-#	define REG_A REG8(1)
-#	define REG_F REG8(0)
-#	define REG_B REG8(3)
-#	define REG_C REG8(2)
-#	define REG_D REG8(5)
-#	define REG_E REG8(4)
-#	define REG_H REG8(7)
-#	define REG_L REG8(6)
+#	define IDX_A 1
+#	define IDX_F 0
+#	define IDX_B 3
+#	define IDX_C 2
+#	define IDX_D 5
+#	define IDX_E 4
+#	define IDX_H 7
+#	define IDX_L 6
 #endif // __BYTE_ORDER__
 
-// 16-bit registers
-#define REG_AF REG16(0)
-#define REG_BC REG16(2)
-#define REG_DE REG16(4)
-#define REG_HL REG16(6)
-#define REG_SP (CPU_PTR->sp)
+// 16-bit register indices
+#define IDX_AF 0
+#define IDX_BC 2
+#define IDX_DE 4
+#define IDX_HL 6
 
-//=======================================================================
-// Operation macros
-//=======================================================================
-// Load `rhs`, discard `lhs`.
-#define LD(lhs, rhs) (rhs)
-// Add `rhs` to `lhs`.
-#define ADD(lhs, rhs) ((lhs) + (rhs))
-// Subtract `rhs` from `lhs`.
-#define SUB(lhs, rhs) ((lhs) - (rhs))
+// Direct 8-bit register access
+#	define REG_A REG8(CPU_PTR, IDX_A)
+#	define REG_F REG8(CPU_PTR, IDX_F)
+#	define REG_B REG8(CPU_PTR, IDX_B)
+#	define REG_C REG8(CPU_PTR, IDX_C)
+#	define REG_D REG8(CPU_PTR, IDX_D)
+#	define REG_E REG8(CPU_PTR, IDX_E)
+#	define REG_H REG8(CPU_PTR, IDX_H)
+#	define REG_L REG8(CPU_PTR, IDX_L)
+
+// Direct 16-bit register access
+#define REG_AF REG16(CPU_PTR, IDX_AF)
+#define REG_BC REG16(CPU_PTR, IDX_BC)
+#define REG_DE REG16(CPU_PTR, IDX_DE)
+#define REG_HL REG16(CPU_PTR, IDX_HL)
+#define REG_SP ((CPU_PTR)->sp)
 
 //=======================================================================
 // decl ADV()
@@ -127,8 +135,8 @@
 // * ib: The number of bytes to advance the instruction pointer by.
 //=======================================================================
 #define ADV(cyc, ib) { \
-	CPU_PTR->div += cyc; \
-	CPU_PTR->pc += ib; \
+	(CPU_PTR)->div += cyc; \
+	(CPU_PTR)->pc += ib; \
 }
 
 //=======================================================================
@@ -162,6 +170,7 @@
 //   right-hand side argument is memory pointed to by REG_HL.
 // * n_cyc: The number of cycles consumed by the operation when the
 //   right-hand side argument is an unsigned 8-bit immediate.
+// * ib: The number of bytes to advance the instruction pointer (PC).
 // * ret: The return value at the end of each case statement.
 //=======================================================================
 
@@ -179,6 +188,10 @@
 // re-evaluted to know when to next preempt the CPU.
 #define HLM_RETURN ((REG_HL == 0xFFFF) ? -1 : 0)
 
+// The base case from which all casesets are constructed.
+#define CASE(offset, op, set, lhs, rhs, cyc, ib, ret) \
+	case offset: set(lhs, op(&REG_F, lhs, rhs)); ADV(cyc, ib); return (ret)
+
 // Defines 7 switch cases, in which the right-hand side arguments
 // appear in the following order:
 // REG_B, REG_C, REG_D, REG_E, REG_H, REG_L, REG_A
@@ -186,31 +199,31 @@
 // offset + (stride * 6) is skipped when enumerating cases,
 // due to the opcodes used by instructions which follow this pattern.
 #define CASESET_7R(offset, stride, op, set, lhs, cyc, ret) \
-	case offset               : set(lhs, op(lhs, REG_B)); ADV(cyc, 1); return (ret); \
-	case offset + stride      : set(lhs, op(lhs, REG_C)); ADV(cyc, 1); return (ret); \
-	case offset + (stride * 2): set(lhs, op(lhs, REG_D)); ADV(cyc, 1); return (ret); \
-	case offset + (stride * 3): set(lhs, op(lhs, REG_E)); ADV(cyc, 1); return (ret); \
-	case offset + (stride * 4): set(lhs, op(lhs, REG_H)); ADV(cyc, 1); return (ret); \
-	case offset + (stride * 5): set(lhs, op(lhs, REG_L)); ADV(cyc, 1); return (ret); \
-	case offset + (stride * 7): set(lhs, op(lhs, REG_A)); ADV(cyc, 1); return (ret)
+	CASE(offset               , op, set, lhs, REG_B, cyc, 1, ret); \
+	CASE(offset + stride      , op, set, lhs, REG_C, cyc, 1, ret); \
+	CASE(offset + (stride * 2), op, set, lhs, REG_D, cyc, 1, ret); \
+	CASE(offset + (stride * 3), op, set, lhs, REG_E, cyc, 1, ret); \
+	CASE(offset + (stride * 4), op, set, lhs, REG_H, cyc, 1, ret); \
+	CASE(offset + (stride * 5), op, set, lhs, REG_L, cyc, 1, ret); \
+	CASE(offset + (stride * 7), op, set, lhs, REG_A, cyc, 1, ret)
 
 // Same as CASESET_7R(), but handles an additional opcode at `n_offset`,
 // for when the RHS value originates from an unsigned 8-bit immediate.
 #define CASESET_7RN(offset, stride, n_offset, op, set, lhs, cyc, n_cyc, ret) \
 	CASESET_7R(offset, stride, op, set, lhs, cyc, ret); \
-	case n_offset: set(lhs, op(lhs, IMMED8)); ADV(n_cyc, 2); return (ret)
+	CASE(n_offset, op, set, lhs, IMMED8, n_cyc, 2, ret)
 
 // Same as CASESET_7R(), but handles an additional opcode at offset + (stride * 6)
 // when the RHS value originates from memory pointed to by the value of REG_HL.
 #define CASESET_7RHLM(offset, stride, op, set, lhs, cyc, HLM_cyc, ret) \
 	CASESET_7R(offset, stride, op, set, lhs, cyc, ret); \
-	case offset + (stride * 6): set(lhs, op(lhs, RMEM8(REG_HL))); ADV(HLM_cyc, 1); return (ret)
+	CASE(offset + (stride * 6), op, set, lhs, RMEM8(REG_HL), HLM_cyc, 1, (ret))
 
 // Same as CASESET_7RHLMN(), but handles an additional opcode at n_offset,
 // for when the RHS value originates from an unsigned 8-bit immediate.
 #define CASESET_7RHLMN(offset, stride, n_offset, op, set, lhs, cyc, HLM_cyc, n_cyc, ret) \
 	CASESET_7RHLM(offset, stride, op, set, lhs, cyc, HLM_cyc, ret); \
-	case n_offset: set(lhs, op(lhs, IMMED8)); ADV(n_cyc, 2); return (ret)
+	CASE(n_offset, op, set, lhs, IMMED8, n_cyc, 2, ret)
 
 // Shortcut macro for the implementation of CASESET_8B, defined below.
 // * b: The number of strides after offset of the case's integral trigger.
@@ -262,6 +275,13 @@
 // Private function declarations
 //-----------------------------------------------------------------------
 //=======================================================================
+static inline int_fast8_t
+interpret_once(
+		struct twi_gb_cpu* restrict,
+		struct twi_gb_mem* restrict
+);
+static char identify_reg8(uint_fast8_t);
+static const char* identify_reg16(uint_fast8_t);
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -270,37 +290,153 @@
 //=======================================================================
 
 //=======================================================================
+// def twi_gb_cpu_diffdump
+//=======================================================================
+void twi_gb_cpu_diffdump(
+		FILE* dest,
+		const char* lhs_name,
+		const struct twi_gb_cpu* restrict lhs,
+		const char* rhs_name,
+		const struct twi_gb_cpu* restrict rhs
+) {
+	twi_assert_notnull(dest);
+	twi_assert_notnull(lhs_name);
+	twi_assert_notnull(lhs);
+	twi_assert_notnull(rhs_name);
+	twi_assert_notnull(rhs);
+
+	fprintf(dest, "== begin twi-gb-cpu diffdump ==\n");
+	// Dump unmatched 8-bit registers
+	for (uint8_t r = 0; r < sizeof(lhs->reg); ++r) {
+		if (REG8(lhs, r) != REG8(rhs, r)) {
+			fprintf(dest, "%c: %s = 0x%" PRIX8 " (%" PRIu8 "); %s = 0x%" PRIX8 " (%" PRIu8 ")\n",
+					identify_reg8(r),
+					lhs_name, REG8(lhs, r), REG8(lhs, r),
+					rhs_name, REG8(rhs, r), REG8(rhs, r)
+			);
+		} // end if equivalent 8-bit registers do not have the same value
+	} // end 8-bit register comparisons
+	
+	// 16-bit format string is used repeatedly.
+	static const char* fmt16 = "%s: %s = 0x%" PRIX16 " (%" PRIu16 "); %s = 0x%" PRIX16 " (%" PRIu16 ")\n";
+	
+	// Dump unmatched 16-bit registers
+	for (uint8_t r = 0; r < sizeof(lhs->reg); r += 2) {
+		if (REG16(lhs, r) != REG16(rhs, r)) {
+			fprintf(dest, fmt16, identify_reg16(r),
+					lhs_name, REG16(lhs, r), REG16(lhs, r),
+					rhs_name, REG16(rhs, r), REG16(rhs, r)
+			);
+		} // end if equivalent 16-bit registers do not have the same value
+	} // end 16-bit register comparisons
+	
+	if (lhs->sp != rhs->sp)
+		fprintf(dest, fmt16, "SP", lhs_name, lhs->sp, lhs->sp, rhs_name, rhs->sp, rhs->sp);
+	if (lhs->pc != rhs->pc)
+		fprintf(dest, fmt16, "PC", lhs_name, lhs->pc, lhs->pc, rhs_name, rhs->pc, rhs->pc);
+	if (lhs->div != rhs->div)
+		fprintf(dest, fmt16, "DIV", lhs_name, lhs->div, lhs->div, rhs_name, rhs->div, rhs->div);
+	
+	fprintf(dest, "== end twi-gb-cpu diffdump ==\n");
+} // end twi_gb_cpu_dump()
+
+//=======================================================================
 //-----------------------------------------------------------------------
 // Private function definitions
 //-----------------------------------------------------------------------
 //=======================================================================
 
 //=======================================================================
-// decl interpret_once()
+// Operation functions.
+//
+// Behavior is undefined if `f` points to NULL.
+//-----------------------------------------------------------------------
+// * f: A pointer to the 8-bit flag register.
+// * lhs: The left-hand side 8-bit or 16-bit value.
+// * rhs: The right-hand side 8-bit or 16-bit value.
+//=======================================================================
+static inline uint8_t LD8(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) { return rhs; }
+static inline uint16_t LD16(uint8_t* restrict f, uint16_t lhs, uint16_t rhs) { return rhs; }
+static inline uint8_t ADD8(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) { return lhs + rhs; }
+static inline uint16_t ADD16(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) { return lhs + rhs; }
+static inline uint8_t SUB(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) { return lhs - rhs; }
+
+//=======================================================================
 // def interpret_once()
 // TODO: Description
 //=======================================================================
 static inline int_fast8_t
 interpret_once(
 		struct twi_gb_cpu* restrict cpu,
-		struct twi_gb_mem* mem,
-		const uint8_t* prog
+		struct twi_gb_mem* restrict mem
 ) {
 	twi_assert_notnull(cpu);
 	twi_assert_notnull(mem);
-	twi_assert_notnull(prog);
 
-	switch (prog[cpu->pc]) {
-		CASESET_7RHLMN(0x40, 0x1, 0x06, LD, WREG8, REG_B, 4, 8, 8, 0); // LD B, r|(HL)|n
-		CASESET_7RHLMN(0x48, 0x1, 0x0E, LD, WREG8, REG_C, 4, 8, 8, 0); // LD C, r|(HL)|n
-		CASESET_7RHLMN(0x50, 0x1, 0x16, LD, WREG8, REG_D, 4, 8, 8, 0); // LD D, r|(HL)|n
-		CASESET_7RHLMN(0x58, 0x1, 0x1E, LD, WREG8, REG_E, 4, 8, 8, 0); // LD E, r|(HL)|n
-		CASESET_7RHLMN(0x60, 0x1, 0x26, LD, WREG8, REG_H, 4, 8, 8, 0); // LD H, r|(HL)|n
-		CASESET_7RHLMN(0x68, 0x1, 0x2E, LD, WREG8, REG_L, 4, 8, 8, 0); // LD L, r|(HL)|n
-		CASESET_7RN(0x70, 0x1, 0x36, LD, WMEM8, REG_HL, 8, 12, HLM_RETURN); // LD (HL), r|n
-		CASESET_7RHLMN(0x78, 0x1, 0x3E, LD, WREG8, REG_A, 4, 8, 8, 0); // LD A, r|(HL)|n
+	switch (twi_gb_mem_read8(mem, cpu->pc)) {
+		CASESET_7RHLMN(0x40, 0x1, 0x06, LD8, WREG8, REG_B, 4, 8, 8, 0); // LD B, r|(HL)|n
+		CASESET_7RHLMN(0x48, 0x1, 0x0E, LD8, WREG8, REG_C, 4, 8, 8, 0); // LD C, r|(HL)|n
+		CASESET_7RHLMN(0x50, 0x1, 0x16, LD8, WREG8, REG_D, 4, 8, 8, 0); // LD D, r|(HL)|n
+		CASESET_7RHLMN(0x58, 0x1, 0x1E, LD8, WREG8, REG_E, 4, 8, 8, 0); // LD E, r|(HL)|n
+		CASESET_7RHLMN(0x60, 0x1, 0x26, LD8, WREG8, REG_H, 4, 8, 8, 0); // LD H, r|(HL)|n
+		CASESET_7RHLMN(0x68, 0x1, 0x2E, LD8, WREG8, REG_L, 4, 8, 8, 0); // LD L, r|(HL)|n
+		CASESET_7RN(0x70, 0x1, 0x36, LD8, WMEM8, REG_HL, 8, 12, HLM_RETURN); // LD (HL), r|n
+		CASESET_7RHLMN(0x78, 0x1, 0x3E, LD8, WREG8, REG_A, 4, 8, 8, 0); // LD A, r|(HL)|n
 	} // end operation lookup
-	
-	return 0;
 }; // end interpret_once()
+
+//=======================================================================
+// def identify_reg8()
+//
+// Provides the single character representation of the 8-bit register
+// indicated by `reg_idx`.
+//
+// In order to identify 16-bit register pairs, use identify_reg16().
+//-----------------------------------------------------------------------
+// Parameters:
+// * reg_idx: An 8-bit register index.
+//
+// Returns: The single character identifier of the register specified by
+// the provided index, or '?' if the argument is not a valid index.
+//=======================================================================
+static char
+identify_reg8(uint_fast8_t reg_idx) {
+	switch (reg_idx) {
+		case IDX_A: return 'A';
+		case IDX_F: return 'F';
+		case IDX_B: return 'B';
+		case IDX_C: return 'C';
+		case IDX_D: return 'D';
+		case IDX_E: return 'E';
+		case IDX_H: return 'H';
+		case IDX_L: return 'L';
+		default: return '?';
+	} // end register identification-by-index
+} // end identify_reg8()
+
+//=======================================================================
+// def identify_reg16()
+//
+// Provides the null-terminated character string representation of
+// the 16-bit register pair identified by `reg_idx'.
+//
+// In order to identify 8-bit registers, use identify_reg8().
+//-----------------------------------------------------------------------
+// Parameters:
+// * reg_idx: A 16-bit register index.
+//
+// Returns: A pointer to the constant null-terminated string identifier
+// of the register specified by the provided index, or "??" if the
+// argument is not a valid index.
+//=======================================================================
+static const char*
+identify_reg16(uint_fast8_t reg_idx) {
+	switch (reg_idx) {
+		case IDX_AF: return "AF";
+		case IDX_BC: return "BC";
+		case IDX_DE: return "DE";
+		case IDX_HL: return "HL";
+		default: return "??";
+	} // end register identification-by-index
+} // end identify_reg16()
 
