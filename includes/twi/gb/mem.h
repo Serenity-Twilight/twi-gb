@@ -25,6 +25,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <twi/gb/mode.h>
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -62,10 +63,9 @@ enum twi_gb_mem_ctl {
 // TODO: Incomplete. This is a skeleton to get LCD working.
 //=======================================================================
 enum twi_gb_mem_sector {
-	TWI_GB_MEM_SECTOR_VRAM0, // Video Memory Bank 0 (0x8000-0x9FFF, 8192 bytes)
-	TWI_GB_MEM_SECTOR_VRAM1, // Video Memory Bank 1 (0x8000-0x9FFF, 8192 bytes) (CGB only)
-	TWI_GB_MEM_SECTOR_OAM, // Object Attribute Memory (0xFE00-0xFE9F, 160 bytes)
-	TWI_GB_MEM_SECTOR_CTL, // Control Registers (0xFF00-0xFF7F, 128 bytes)
+	TWI_GB_MEM_SECTOR_VRAM, // Video Memory
+	TWI_GB_MEM_SECTOR_OAM, // Object Attribute Memory
+	TWI_GB_MEM_SECTOR_CTL, // Control Registers
 };
 
 //=======================================================================
@@ -73,9 +73,13 @@ enum twi_gb_mem_sector {
 //       The rest will be implemented later.
 //=======================================================================
 struct twi_gb_mem {
-	_Alignas(max_align_t) uint8_t vram0[8192];
-	uint8_t oam[160];
-	uint8_t ctl[128];
+	_Alignas(max_align_t) uint8_t map[0x10000]; // 64 KiB
+	const uint8_t* rom;
+	uint8_t* vram;
+	uint8_t* eram;
+	uint8_t* wram;
+	uint8_t rom_bank;
+	uint8_t eram_bank;
 };
 
 //=======================================================================
@@ -98,6 +102,18 @@ extern const size_t TWI_GB_MEM_SZ_VRAM;
 // External function declarations
 //-----------------------------------------------------------------------
 //=======================================================================
+
+//=======================================================================
+// decl twi_gb_mem_init()
+// TODO
+//=======================================================================
+int_fast8_t
+twi_gb_mem_init(
+		struct twi_gb_mem* restrict mem,
+		const char* rom_path,
+		const char* sram_path,
+		enum twi_gb_mode preferred_mode
+);
 
 //=======================================================================
 // decl twi_gb_mem_read8()
@@ -133,9 +149,27 @@ twi_gb_mem_write8(struct twi_gb_mem* restrict mem, uint16_t addr, uint8_t val);
 //=======================================================================
 const uint8_t*
 twi_gb_mem_read_sector(
-		const struct twi_gb_mem* mem,
+		const struct twi_gb_mem* restrict mem,
 		enum twi_gb_mem_sector sector
 );
+
+//=======================================================================
+// decl twi_gb_mem_mode()
+//
+// Indicates the operating mode of the emulated system.
+// *  0: DMG mode
+// * !0: CGB mode
+//
+// Behavior is undefined if `mem` does not point to an initialized,
+// undestroyed twi-gb-mem object.
+//-----------------------------------------------------------------------
+// Parameters:
+// * mem: Pointer to an initialized, undestroyed twi-gb-mem object.
+//
+// Returns: The mode that the provided twi-gb-mem object is running in.
+//=======================================================================
+enum twi_gb_mode
+twi_gb_mem_mode(const struct twi_gb_mem* restrict mem);
 
 #endif // TWI_GB_MEM_H
 

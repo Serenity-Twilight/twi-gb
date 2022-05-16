@@ -19,8 +19,10 @@
 //-----------------------------------------------------------------------
 //=======================================================================
 #include <stdint.h>
+#include <stdlib.h>
 #include <twi/std/assertf.h>
 #include <twi/gb/log.h>
+#include <twi/gb/mode.h>
 #include <twi/gb/mem.h>
 
 //=======================================================================
@@ -32,7 +34,53 @@
 //=======================================================================
 // def TWI_GB_MEM_SZ_VRAM
 //=======================================================================
-const size_t TWI_GB_MEM_SZ_VRAM = 8192; // 8 KiB
+const size_t TWI_GB_MEM_SZ_VRAM = 8192; // 8 KiB, x2 on CGB
+const size_t TWI_GB_MEM_SZ_WRAM_DMG = 8192; // 8 KiB
+const size_t TWI_GB_MEM_SZ_WRAM_CGB = TWI_GB_MEM_SZ_WRAM_DMG * 4; // 32 KiB
+
+//=======================================================================
+//-----------------------------------------------------------------------
+// Internal constant definitions
+//-----------------------------------------------------------------------
+//=======================================================================
+
+//=======================================================================
+// Memory map sector start addresses
+//=======================================================================
+static const uint_fast16_t ST_ROM_BEGIN = 0x0000;
+static const uint_fast16_t DY_ROM_BEGIN = 0x4000;
+static const uint_fast16_t VRAM_BEGIN = 0x8000;
+static const uint_fast16_t ERAM_BEGIN = 0xA000;
+static const uint_fast16_t ST_WRAM_BEGIN = 0xC000;
+static const uint_fast16_t DY_WRAM_BEGIN = 0xD000;
+static const uint_fast16_t ECHO_RAM_BEGIN = 0xE000;
+static const uint_fast16_t OAM_BEGIN = 0xFE00;
+static const uint_fast16_t CTL_BEGIN = 0xFF00;
+static const uint_fast16_t STACK_BEGIN = 0xFF80;
+
+//=======================================================================
+// Memory map sector end addresses
+//=======================================================================
+static const uint_fast16_t ST_ROM_END = DY_ROM_BEGIN;
+static const uint_fast16_t DY_ROM_END = VRAM_BEGIN;
+static const uint_fast16_t VRAM_END = ERAM_BEGIN;
+static const uint_fast16_t ERAM_END = ST_WRAM_BEGIN;
+static const uint_fast16_t ST_WRAM_END = DY_WRAM_BEGIN;
+static const uint_fast16_t DY_WRAM_END = ECHO_RAM_BEGIN;
+static const uint_fast16_t ECHO_RAM_END = OAM_BEGIN;
+static const uint_fast16_t OAM_END = 0xFEA0;
+static const uint_fast16_t CTL_END = STACK_BEGIN;
+static const uint_fast16_t STACK_END = 0xFFFF;
+
+//=======================================================================
+// Address of Interrupt Enable register
+//=======================================================================
+static const uint_fast16_t IE_ADDR = 0xFFFF;
+
+//=======================================================================
+// Miscellaneous
+//=======================================================================
+static const uint_fast16_t ECHO_DIFF = ECHO_RAM_BEGIN - ST_WRAM_BEGIN;
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -41,11 +89,50 @@ const size_t TWI_GB_MEM_SZ_VRAM = 8192; // 8 KiB
 //=======================================================================
 
 //=======================================================================
+// def twi_gb_mem_init()
+//=======================================================================
+int_fast8_t
+twi_gb_mem_init(
+		struct twi_gb_mem* restrict mem,
+		const char* rom_path,
+		const char* sram_path,
+		enum twi_gb_mode preferred_mode
+) {
+	twi_assert_notnull(mem);
+
+	mem->rom = NULL; // TODO: Load ROM
+	mem->rom_bank = 0;
+	mem->eram = NULL; // TODO: Load SRAM
+	mem->eram_bank = 0;
+	
+	// TODO: Preferred mode should be superceded by ROM needs.
+	// i.e. If the ROM loaded requires CGB, then always run in CGB mode.
+	if (preferred_mode == TWI_GB_MODE_CGB) {
+		// Allocated internal memory for VRAM and RAM.
+		// CGB has x2 VRAM and x4 RAM of DMG.
+		mem->vram = malloc(TWI_GB_MEM_SZ_VRAM * 2 + TWI_GB_MEM_SZ_WRAM_CGB);
+		if (!(mem->vram))
+			return 1;
+		mem->wram = mem->vram + TWI_GB_MEM_SZ_VRAM * 2;
+	} else {
+		// Both fit entirely into the memory map on DMG.
+		mem->vram = NULL;
+		mem->wram = NULL;
+	} // end if/else CGB/DMG mode
+
+	return 0;
+} // end twi_gb_mem_init()
+
+//=======================================================================
 // def twi_gb_mem_read8()
 //=======================================================================
 uint8_t
-twi_gb_mem_read8(const struct twi_gb_mem* restrict mem, uint16_t addr) {
-	return 0; // TODO
+twi_gb_mem_read8(
+		const struct twi_gb_mem* restrict mem,
+		uint16_t addr
+) {
+	twi_assert_notnull(mem);
+	return mem->map[addr];
 } // end twi_gb_mem_read8()
 
 //=======================================================================
@@ -57,7 +144,42 @@ twi_gb_mem_write8(
 		uint16_t addr,
 		uint8_t val
 ) {
-	// TODO
+	twi_assert_notnull(mem);
+	switch (addr / 0x1000) { // Index by highest-order nibble.
+		case 0x8: case 0x9:
+			break; // TODO: VRAM
+		case 0xA: case 0xB:
+			break; // TODO: ERAM
+		case 0xC: case 0xD: // WRAM: Write to WRAM and ECHO RAM. Writethrough on CGB.
+			mem->map[addr] = val;
+			if (addr < (ECHO_RAM_END - ECHO_DIFF))
+				mem->map[addr + ECHO_DIFF] = val;
+			if (mem->wram != NULL) // Writethrough
+				mem->wram[(addr - ST_WRAM_BEGIN) + (TWI_GB_MEM_SZ_WRAM_DMG * 0)] = val; // TODO: Replace 0 with WRAM bank
+			break; // TODO: WRAM
+		case 0xE: // ECHO RAM: Write to ECHO RAM and WRAM. Writethrough on CGB.
+			mem->map[addr] = val;
+			mem->map[addr - ECHO_DIFF] = val;
+			if (mem->wram != NULL) // Writethrough
+				mem->wram[(addr - ST_WRAM_BEGIN) + (TWI_GB_MEM_SZ_WRAM_DMG * 0)] = val; // TODO: Replace 0 with WRAM bank
+			break; // TODO: Echo RAM
+		case 0xF:
+			switch (addr / 0x100) { // Index nibble 0xF by 2nd-highest order nibble.
+				case 0xFE:
+					break; // TODO: OAM
+				case 0xFF:
+					break; // TODO: 0xFF stuff
+				default: // Echo RAM: Write to ECHO RAM and WRAM. Writethrough on CGB.
+					mem->map[addr] = val;
+					mem->map[addr - ECHO_DIFF] = val;
+					if (mem->wram != NULL) // Writethrough
+						mem->wram[(addr - ST_WRAM_BEGIN) + (TWI_GB_MEM_SZ_WRAM_DMG * 0)] = val; // TODO: Replace 0 with WRAM bank
+					break;
+			}
+			break;
+		default:
+			break; // TODO: MBC
+	}
 } // end twi_gb_mem_write8()
 
 //=======================================================================
@@ -65,17 +187,28 @@ twi_gb_mem_write8(
 //=======================================================================
 const uint8_t*
 twi_gb_mem_read_sector(
-		const struct twi_gb_mem* mem,
+		const struct twi_gb_mem* restrict mem,
 		enum twi_gb_mem_sector sector
 ) {
 	twi_assert_notnull(mem);
 	switch (sector) {
-		case TWI_GB_MEM_SECTOR_VRAM0: return mem->vram0;
-		case TWI_GB_MEM_SECTOR_OAM: return mem->oam;
-		case TWI_GB_MEM_SECTOR_CTL: return mem->ctl;
+		case TWI_GB_MEM_SECTOR_VRAM:
+			return (mem->vram != NULL ? mem->vram : &(mem->map[VRAM_BEGIN]));
+		case TWI_GB_MEM_SECTOR_OAM: return &(mem->map[OAM_BEGIN]);
+		case TWI_GB_MEM_SECTOR_CTL: return &(mem->map[CTL_BEGIN]);
 		default:
 			twi_assertf(0, "Invalid or unhandled sector provided (%d).", sector);
 			return NULL;
 	} // end switch (sector)
 } // end twi_gb_mem_read_sector()
+
+//=======================================================================
+// def twi_gb_mem_mode()
+//=======================================================================
+enum twi_gb_mode
+twi_gb_mem_mode(const struct twi_gb_mem* restrict mem) {
+	twi_assert_notnull(mem);
+	// The VRAM and WRAM swap buffers are NULL in DMG mode.
+	return (mem->wram != NULL ? TWI_GB_MODE_CGB : TWI_GB_MODE_DMG);
+} // end twi_gb_mem_mode()
 
