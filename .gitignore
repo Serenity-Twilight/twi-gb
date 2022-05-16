@@ -1,7 +1,10 @@
 # Ignore automatically generated files and directories.
+tobj
 dobj
 obj
 make
+ttwi-gb
+ttwi-gb.exe
 dtwi-gb
 dtwi-gb.exe
 twi-gb
