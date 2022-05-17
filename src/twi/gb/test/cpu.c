@@ -45,18 +45,18 @@
 //=======================================================================
 
 //=======================================================================
-// def enum testcpu_type
+// def enum testcpu_type8
 // 
 // Defines operand type for use in testing of 8-bit operands.
 //=======================================================================
-enum testcpu_type {
+enum testcpu_type8 {
 	TESTCPU_TYPE_REG8, // Indicates index of 8-bit register
+	TESTCPU_TYPE_REG8_RO, // Indicates index of 8-bit register that should NOT be written to.
 	TESTCPU_TYPE_REG16PTR, // Indicates index of 16-bit register for use as a pointer to memory
-	TESTCPU_TYPE_RBIT, // Indicates a literal bit offset that will NOT modify the other argument
-	TESTCPU_TYPE_WBIT, // Indicates a literal bit offset that will modify the other argument
+	TESTCPU_TYPE_BIT, // Indicates a literal bit offset
 	TESTCPU_TYPE_IMMED8, // Indicates use of unsigned 8-bit immediate
 	TESTCPU_TYPE_NONE // Indicates that there is no operand
-}; // end enum testcpu_type
+}; // end enum testcpu_type8
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -68,9 +68,9 @@ static int_fast8_t test_register_coherency();
 static int_fast8_t testcpu8(
 		const char* restrict, uint_fast16_t, const uint8_t* restrict,
 		uint8_t (*)(uint8_t* restrict, uint8_t, uint8_t),
-		enum testcpu_type, uint_fast8_t, const uint8_t[],
-		enum testcpu_type, uint_fast8_t, const uint8_t[],
-		uint_fast8_t, uint_fast8_t
+		uint_fast8_t, uint_fast8_t,
+		enum testcpu_type8, uint_fast8_t, const uint8_t[],
+		enum testcpu_type8, uint_fast8_t, const uint8_t[]
 );
 
 //=======================================================================
@@ -85,6 +85,7 @@ static int_fast8_t testcpu8(
 size_t
 twi_gb_test_cpu_all() {
 	// Operand sets.
+	srand(2);
 	static const uint8_t reg8_set[] = {
 		IDX_B, IDX_C, IDX_D, IDX_E, IDX_H, IDX_L, IDX_A
 	};
@@ -106,10 +107,9 @@ twi_gb_test_cpu_all() {
 			0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7F  // LD A, r
 		};
 		fail_count += testcpu8(
-				"LD r, r", sizeof(prog), prog, LD8,
+				"LD r, r", sizeof(prog), prog, LD8, 1, 4,
 				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set,
-				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set,
-				1, 4
+				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set
 		);
 	} // end LD r, r
 	
@@ -118,10 +118,9 @@ twi_gb_test_cpu_all() {
 			0x46, 0x4E, 0x56, 0x5E, 0x66, 0x6E, 0x7E // LD r, (HL)
 		};
 		fail_count += testcpu8(
-				"LD r, (HL)", sizeof(prog), prog, LD8,
+				"LD r, (HL)", sizeof(prog), prog, LD8, 1, 8,
 				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set,
-				TESTCPU_TYPE_REG16PTR, sizeof(HL_set), HL_set,
-				1, 8
+				TESTCPU_TYPE_REG16PTR, sizeof(HL_set), HL_set
 		);
 	} // end LD r, (HL)
 
@@ -130,10 +129,9 @@ twi_gb_test_cpu_all() {
 			0x06, 0x0E, 0x16, 0x1E, 0x26, 0x2E, 0x3E // LD r, n
 		};
 		fail_count += testcpu8(
-				"LD r, n", sizeof(prog), prog, LD8,
+				"LD r, n", sizeof(prog), prog, LD8, 2, 8,
 				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set,
-				TESTCPU_TYPE_IMMED8, 0, NULL,
-				2, 8
+				TESTCPU_TYPE_IMMED8, 0, NULL
 		);
 	} // end LD r, n
 	
@@ -142,20 +140,18 @@ twi_gb_test_cpu_all() {
 			0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x77 // LD (HL), r
 		};
 		fail_count += testcpu8(
-				"LD (HL), r", sizeof(prog), prog, LD8,
+				"LD (HL), r", sizeof(prog), prog, LD8, 1, 8,
 				TESTCPU_TYPE_REG16PTR, sizeof(HL_set), HL_set,
-				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set,
-				1, 8
+				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set
 		);
 	}
 
 	{ // LD (HL), n
 		static const uint8_t prog = 0x36;
 		fail_count += testcpu8(
-				"LD (HL), n", 1, &prog, LD8,
+				"LD (HL), n", 1, &prog, LD8, 2, 12,
 				TESTCPU_TYPE_REG16PTR, sizeof(HL_set), HL_set,
-				TESTCPU_TYPE_IMMED8, 0, NULL,
-				2, 12
+				TESTCPU_TYPE_IMMED8, 0, NULL
 		);
 	}
 
@@ -178,7 +174,7 @@ testcpu_setrand8(
 		struct twi_gb_cpu* restrict cpu2,
 		struct twi_gb_mem* restrict mem1,
 		struct twi_gb_mem* restrict mem2,
-		enum testcpu_type type,
+		enum testcpu_type8 type,
 		uint8_t idx
 ) {
 	twi_assert_notnull(cpu1);
@@ -187,7 +183,7 @@ testcpu_setrand8(
 	twi_assert_notnull(mem2);
 
 	uint8_t val = rand() % 0x100;
-	if (type == TESTCPU_TYPE_REG8) {
+	if (type == TESTCPU_TYPE_REG8 || type == TESTCPU_TYPE_REG8_RO) {
 		REG8(cpu1, idx) = REG8(cpu2, idx) = val;
 	} else if (type == TESTCPU_TYPE_REG16PTR) {
 		// The randomized value will need to be assigned to
@@ -339,8 +335,17 @@ test_fail:
 // * op: The operation function to use in calculating expected result.
 //   Behavior is undefined if `op` does not point to a function of
 //   the specified signature.
+//   * First argument should be a pointer to the flag register.
+//   * Second argument should be the left-hand side value.
+//   * Third argument should be the right-hand side value.
+//   * Should return the value resulting from operating on the
+//     second and third arguments.
+// * pc_per_op: The number of instructions to expect the instruction
+//   pointer to advance after each instruction.
+// * div_per_op: The number of clock cycles to expect the emulated CPU
+//   to advance after each instruction.
 // * lhs_type: The type of the left-hand side argument.
-//   Can be either REG8 or REG16PTR.
+//   Can be any of REG8, REG8_RO, or REG16PTR.
 //   Behavior is undefined if any other operand type is specified.
 // * lhs_sz: The number of elements in the array pointed to by `lhs`.
 // * lhs: Pointer to an array of register indices to use as arguments.
@@ -350,12 +355,9 @@ test_fail:
 //   If either IMMED8 or NONE, `rhs_sz` and `rhs` are ignored.
 // * rhs_sz: The number of elements in the array pointed to by `rhs`.
 // * rhs: Pointer to an array of register indices to use as arguments.
-//   Behavior is undefined if `rhs` does not point to an array of indices
-//   with at least `rhs_sz` number of elements.
-// * pc_per_op: The number of instructions to expect the instruction
-//   pointer to advance after each instruction.
-// * div_per_op: The number of clock cycles to expect the emulated CPU
-//   to advance after each instruction.
+//   If `rhs_type` is not IMMED8 or NONE, then behavior is undefined
+//   if `rhs` does not point to an array of indices with at least
+//   `rhs_sz` number of elements
 //
 // Returns: 0 on success, 1 on failure
 //=======================================================================
@@ -365,17 +367,16 @@ testcpu8(
 		uint_fast16_t prog_sz,
 		const uint8_t* restrict prog,
 		uint8_t (*op)(uint8_t* restrict, uint8_t, uint8_t),
-		enum testcpu_type lhs_type,
+		uint_fast8_t pc_per_op,
+		uint_fast8_t div_per_op,
+		enum testcpu_type8 lhs_type,
 		uint_fast8_t lhs_sz,
 		const uint8_t lhs[lhs_sz],
-		enum testcpu_type rhs_type,
+		enum testcpu_type8 rhs_type,
 		uint_fast8_t rhs_sz,
-		const uint8_t rhs[rhs_sz],
-		uint_fast8_t pc_per_op,
-		uint_fast8_t div_per_op
+		const uint8_t rhs[rhs_sz]
 ) {
-	twi_assertf(lhs_type != TESTCPU_TYPE_RBIT
-			     && lhs_type != TESTCPU_TYPE_WBIT,
+	twi_assertf(lhs_type != TESTCPU_TYPE_BIT,
 			"Left-hand side argument(s) cannot be bit offsets.");
 	twi_assertf(lhs_type != TESTCPU_TYPE_IMMED8,
 			"Left-hand side argument(s) cannot be immediates.");
@@ -390,12 +391,10 @@ testcpu8(
 	memcpy(&actual_cpu, &expected_cpu, sizeof(struct twi_gb_cpu));
 	memcpy(&actual_mem, &expected_mem, sizeof(struct twi_gb_mem));
 
-	// If `rhs_type` is IMMED8 or NONE, then `rhs` is unused.
-	// The inner loop should run once.
+	// If `rhs_type` is IMMED8 or NONE, then `rhs` is unused,
+	// then the inner loop should run once.
 	// Loop logic will not utilize `rhs` values when inappropriate.
-	uint8_t internal_rhs_sz;
-	if (rhs_type == TESTCPU_TYPE_IMMED8
-	 || rhs_type == TESTCPU_TYPE_NONE)
+	if (rhs_type == TESTCPU_TYPE_IMMED8 || rhs_type == TESTCPU_TYPE_NONE)
 		rhs_sz = 1;
 
 	for (uint8_t lhs_pos = 0; lhs_pos < lhs_sz; ++lhs_pos) {
@@ -410,14 +409,14 @@ testcpu8(
 
 			uint8_t rhs_val;
 			if (rhs_type == TESTCPU_TYPE_REG8
+			 || rhs_type == TESTCPU_TYPE_REG8_RO
 			 || rhs_type == TESTCPU_TYPE_REG16PTR) {
 				rhs_val = testcpu_setrand8(
 						&expected_cpu, &actual_cpu,
 						&expected_mem, &actual_mem,
 						rhs_type, rhs[rhs_pos]
 				);
-			} else if (rhs_type == TESTCPU_TYPE_RBIT
-			        || rhs_type == TESTCPU_TYPE_WBIT) {
+			} else if (rhs_type == TESTCPU_TYPE_BIT) {
 				// rhs is hard-coded into the instruction itself
 				rhs_val = rhs[rhs_pos];
 			} else if (rhs_type == TESTCPU_TYPE_IMMED8) {
@@ -429,13 +428,12 @@ testcpu8(
 			}
 
 			// Evaluate result, and simulate in expected components.
+			//fprintf(stderr, "%s: %" PRIX8 " %" PRIX8"\n", name, lhs_val, rhs_val);
 			uint8_t result = op(&REG8(&expected_cpu, IDX_F), lhs_val, rhs_val);
-			if (rhs_type != TESTCPU_TYPE_RBIT) { // No non-F writes occur with RBIT.
-				if (lhs_type == TESTCPU_TYPE_REG8)
-					REG8(&expected_cpu, lhs[lhs_pos]) = result;
-				else // REG16PTR
-					twi_gb_mem_write8(&expected_mem, REG16(&expected_cpu, lhs[lhs_pos]), result);
-			} // end if assignment of non-F result occurs
+			if (lhs_type == TESTCPU_TYPE_REG8)
+				REG8(&expected_cpu, lhs[lhs_pos]) = result;
+			else if (lhs_type == TESTCPU_TYPE_REG16PTR)
+				twi_gb_mem_write8(&expected_mem, REG16(&expected_cpu, lhs[lhs_pos]), result);
 			expected_cpu.pc += pc_per_op;
 			expected_cpu.div += div_per_op;
 
