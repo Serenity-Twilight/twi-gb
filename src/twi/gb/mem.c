@@ -18,6 +18,9 @@
 // along with twi-gb. If not, see <https://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------
 //=======================================================================
+#ifndef TWI_GB_MEM_C
+#define TWI_GB_MEM_C
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <twi/std/assertf.h>
@@ -32,7 +35,7 @@
 //=======================================================================
 
 //=======================================================================
-// def TWI_GB_MEM_SZ_VRAM
+// Memory block sizes
 //=======================================================================
 const size_t TWI_GB_MEM_SZ_VRAM = 8192; // 8 KiB, x2 on CGB
 const size_t TWI_GB_MEM_SZ_WRAM_DMG = 8192; // 8 KiB
@@ -47,12 +50,12 @@ const size_t TWI_GB_MEM_SZ_WRAM_CGB = TWI_GB_MEM_SZ_WRAM_DMG * 4; // 32 KiB
 //=======================================================================
 // Memory map sector start addresses
 //=======================================================================
-static const uint_fast16_t ST_ROM_BEGIN = 0x0000;
-static const uint_fast16_t DY_ROM_BEGIN = 0x4000;
+static const uint_fast16_t FX_ROM_BEGIN = 0x0000;
+static const uint_fast16_t SW_ROM_BEGIN = 0x4000;
 static const uint_fast16_t VRAM_BEGIN = 0x8000;
 static const uint_fast16_t ERAM_BEGIN = 0xA000;
-static const uint_fast16_t ST_WRAM_BEGIN = 0xC000;
-static const uint_fast16_t DY_WRAM_BEGIN = 0xD000;
+static const uint_fast16_t FX_WRAM_BEGIN = 0xC000;
+static const uint_fast16_t SW_WRAM_BEGIN = 0xD000;
 static const uint_fast16_t ECHO_RAM_BEGIN = 0xE000;
 static const uint_fast16_t OAM_BEGIN = 0xFE00;
 static const uint_fast16_t CTL_BEGIN = 0xFF00;
@@ -61,12 +64,12 @@ static const uint_fast16_t STACK_BEGIN = 0xFF80;
 //=======================================================================
 // Memory map sector end addresses
 //=======================================================================
-static const uint_fast16_t ST_ROM_END = DY_ROM_BEGIN;
-static const uint_fast16_t DY_ROM_END = VRAM_BEGIN;
+static const uint_fast16_t FX_ROM_END = SW_ROM_BEGIN;
+static const uint_fast16_t SW_ROM_END = VRAM_BEGIN;
 static const uint_fast16_t VRAM_END = ERAM_BEGIN;
-static const uint_fast16_t ERAM_END = ST_WRAM_BEGIN;
-static const uint_fast16_t ST_WRAM_END = DY_WRAM_BEGIN;
-static const uint_fast16_t DY_WRAM_END = ECHO_RAM_BEGIN;
+static const uint_fast16_t ERAM_END = FX_WRAM_BEGIN;
+static const uint_fast16_t FX_WRAM_END = SW_WRAM_BEGIN;
+static const uint_fast16_t SW_WRAM_END = ECHO_RAM_BEGIN;
 static const uint_fast16_t ECHO_RAM_END = OAM_BEGIN;
 static const uint_fast16_t OAM_END = 0xFEA0;
 static const uint_fast16_t CTL_END = STACK_BEGIN;
@@ -80,7 +83,8 @@ static const uint_fast16_t IE_ADDR = 0xFFFF;
 //=======================================================================
 // Miscellaneous
 //=======================================================================
-static const uint_fast16_t ECHO_DIFF = ECHO_RAM_BEGIN - ST_WRAM_BEGIN;
+// Number of bytes between start of WRAM and start of echo RAM.
+static const uint_fast16_t ECHO_DIFF = ECHO_RAM_BEGIN - FX_WRAM_BEGIN;
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -155,13 +159,13 @@ twi_gb_mem_write8(
 			if (addr < (ECHO_RAM_END - ECHO_DIFF))
 				mem->map[addr + ECHO_DIFF] = val;
 			if (mem->wram != NULL) // Writethrough
-				mem->wram[(addr - ST_WRAM_BEGIN) + (TWI_GB_MEM_SZ_WRAM_DMG * 0)] = val; // TODO: Replace 0 with WRAM bank
+				mem->wram[(addr - FX_WRAM_BEGIN) + (TWI_GB_MEM_SZ_WRAM_DMG * 0)] = val; // TODO: Replace 0 with WRAM bank
 			break; // TODO: WRAM
 		case 0xE: // ECHO RAM: Write to ECHO RAM and WRAM. Writethrough on CGB.
 			mem->map[addr] = val;
 			mem->map[addr - ECHO_DIFF] = val;
 			if (mem->wram != NULL) // Writethrough
-				mem->wram[(addr - ST_WRAM_BEGIN) + (TWI_GB_MEM_SZ_WRAM_DMG * 0)] = val; // TODO: Replace 0 with WRAM bank
+				mem->wram[(addr - FX_WRAM_BEGIN) + (TWI_GB_MEM_SZ_WRAM_DMG * 0)] = val; // TODO: Replace 0 with WRAM bank
 			break; // TODO: Echo RAM
 		case 0xF:
 			switch (addr / 0x100) { // Index nibble 0xF by 2nd-highest order nibble.
@@ -173,7 +177,7 @@ twi_gb_mem_write8(
 					mem->map[addr] = val;
 					mem->map[addr - ECHO_DIFF] = val;
 					if (mem->wram != NULL) // Writethrough
-						mem->wram[(addr - ST_WRAM_BEGIN) + (TWI_GB_MEM_SZ_WRAM_DMG * 0)] = val; // TODO: Replace 0 with WRAM bank
+						mem->wram[(addr - FX_WRAM_BEGIN) + (TWI_GB_MEM_SZ_WRAM_DMG * 0)] = val; // TODO: Replace 0 with WRAM bank
 					break;
 			}
 			break;
@@ -211,4 +215,6 @@ twi_gb_mem_mode(const struct twi_gb_mem* restrict mem) {
 	// The VRAM and WRAM swap buffers are NULL in DMG mode.
 	return (mem->wram != NULL ? TWI_GB_MODE_CGB : TWI_GB_MODE_DMG);
 } // end twi_gb_mem_mode()
+
+#endif // TWI_GB_MEM_C
 
