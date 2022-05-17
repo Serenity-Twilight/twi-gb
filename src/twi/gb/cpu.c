@@ -18,6 +18,9 @@
 // along with twi-gb. If not, see <https://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------
 //=======================================================================
+#ifndef TWI_GB_CPU_C
+#define TWI_GB_CPU_C
+
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -439,4 +442,6 @@ identify_reg16(uint_fast8_t reg_idx) {
 		default: return "??";
 	} // end register identification-by-index
 } // end identify_reg16()
+
+#endif // TWI_GB_CPU_C
 
