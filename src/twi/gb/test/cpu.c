@@ -19,6 +19,7 @@
 //-----------------------------------------------------------------------
 //=======================================================================
 #include <../src/twi/gb/cpu.c>
+#include <../src/twi/gb/mem.c>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -38,102 +39,39 @@
 //=======================================================================
 
 //=======================================================================
-// Operand index sets
-//=======================================================================
-static const uint8_t reg8_set[] = {
-	IDX_B, IDX_C, IDX_D, IDX_E, IDX_H, IDX_L, IDX_A
-};
-
-//=======================================================================
-// Test programs
-//=======================================================================
-static const uint8_t LD_r_r_ops[] = { // rhs: B,C,D,E,H,L,A
-	0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x47, // LD B, r
-	0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4F, // LD C, r
-	0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x57, // LD D, r
-	0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5F, // LD E, r
-	0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x67, // LD H, r
-	0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6F, // LD L, r
-	0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7F  // LD A, r
-};
-
-//=======================================================================
 //-----------------------------------------------------------------------
 // Private type definitions
 //-----------------------------------------------------------------------
 //=======================================================================
 
 //=======================================================================
-// def enum twi_gb_cpu_test_optype
+// def enum testcpu_type
 // 
 // Defines operand type for use in testing of 8-bit operands.
 //=======================================================================
-enum twi_gb_test_cpu_optype8 {
-	TWI_GB_TEST_CPU_OPTYPE_REG8, // Indicates index of 8-bit register
-	TWI_GB_TEST_CPU_OPTYPE_REG16PTR, // Indicates index of 16-bit register for use as a pointer to memory
-	TWI_GB_TEST_CPU_OPTYPE_RBIT, // Indicates a literal bit offset that will NOT modify the other argument
-	TWI_GB_TEST_CPU_OPTYPE_WBIT, // Indicates a literal bit offset that will modify the other argument
-	TWI_GB_TEST_CPU_OPTYPE_IMMED8, // Indicates use of unsigned 8-bit immediate
-	TWI_GB_TEST_CPU_OPTYPE_NONE // Indicates that there is no operand
-}; // end enum twi_gb_cpu_test_optype
-
-//=======================================================================
-// def struct twi_gb_test_cpu_args8
-// 
-// Arguments passed to cputest8, a polymorphic function for testing
-// CPU operations which accept 8-bit operands.
-//-----------------------------------------------------------------------
-// Members:
-// * name: The name of the test. Used when reporting failures.
-// * prog_sz: The size of the test program in bytes.
-// * prog: The test program to run.
-// * op: The operation function to use in calculating expected result.
-//   Behavior is undefined if `op` does not point to a function of
-//   the specified signature.
-// * lhs_type: The type of the left-hand side argument.
-//   Can be any of REG8, REG16PTR, RBIT, or WBIT.
-//   Behavior is undefined if IMMED8 or NONE are specified.
-// * lhs_sz: The number of elements in the array pointed to by `lhs`.
-// * lhs: Pointer to an array of register indices to use as arguments.
-//   Behavior is undefined if `lhs` does not point to an array of indices
-//   with at least `lhs_sz` number of elements.
-// * rhs_type: The type of the right-hand side arguments.
-//   Can be any of REG8, REG16PTR, IMMED8, or NONE.
-//   Behavior is undefined if RBIT or WBIT is specified.
-//   If either IMMED8 or NONE, `rhs_sz` and `rhs` are ignored.
-// * rhs_sz: The number of elements in the array pointed to by `rhs`.
-// * rhs: Pointer to an array of register indices to use as arguments.
-// * pc_per_op: The number of instructions to expect the instruction
-//   pointer to advance after each instruction.
-// * div_per_op: The number of clock cycles to expect the emulated CPU
-//   to advance after each instruction.
-//=======================================================================
-struct twi_gb_test_cpu_args8 {
-	const char* name;
-	size_t prog_sz;
-	const uint8_t* prog;
-	uint8_t (*op)(uint8_t* restrict, uint8_t, uint8_t);
-	enum twi_gb_test_cpu_optype8 lhs_type;
-	uint8_t lhs_sz;
-	const uint8_t* lhs;
-	enum twi_gb_test_cpu_optype8 rhs_type;
-	uint8_t rhs_sz;
-	const uint8_t* rhs;
-	uint8_t pc_per_op;
-	uint8_t div_per_op;
-}; // end struct twi_gb_test_cpu_args8
+enum testcpu_type {
+	TESTCPU_TYPE_REG8, // Indicates index of 8-bit register
+	TESTCPU_TYPE_REG16PTR, // Indicates index of 16-bit register for use as a pointer to memory
+	TESTCPU_TYPE_RBIT, // Indicates a literal bit offset that will NOT modify the other argument
+	TESTCPU_TYPE_WBIT, // Indicates a literal bit offset that will modify the other argument
+	TESTCPU_TYPE_IMMED8, // Indicates use of unsigned 8-bit immediate
+	TESTCPU_TYPE_NONE // Indicates that there is no operand
+}; // end enum testcpu_type
 
 //=======================================================================
 //-----------------------------------------------------------------------
 // Private function declarations
 //-----------------------------------------------------------------------
 //=======================================================================
-// Helpers
-static void set_program(struct twi_gb_mem* restrict, uint16_t, const void* restrict);
-static void test_cpu_reset(struct twi_gb_cpu* restrict);
 // Tests
 static int_fast8_t test_register_coherency();
-static int_fast8_t cputest8(const struct twi_gb_test_cpu_args8* restrict);
+static int_fast8_t testcpu8(
+		const char* restrict, uint_fast16_t, const uint8_t* restrict,
+		uint8_t (*)(uint8_t* restrict, uint8_t, uint8_t),
+		enum testcpu_type, uint_fast8_t, const uint8_t[],
+		enum testcpu_type, uint_fast8_t, const uint8_t[],
+		uint_fast8_t, uint_fast8_t
+);
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -146,27 +84,80 @@ static int_fast8_t cputest8(const struct twi_gb_test_cpu_args8* restrict);
 //=======================================================================
 size_t
 twi_gb_test_cpu_all() {
-	struct twi_gb_cpu cpu;
-	struct twi_gb_mem mem;
-	twi_gb_mem_init(&mem, NULL, NULL, TWI_GB_MODE_DMG);
+	// Operand sets.
+	static const uint8_t reg8_set[] = {
+		IDX_B, IDX_C, IDX_D, IDX_E, IDX_H, IDX_L, IDX_A
+	};
+	static const uint8_t HL_set[] = { IDX_HL };
+
 	size_t fail_count = 0;
-
 	fail_count += test_register_coherency();
-
-	// Tests for instructions which use 8-bit operands
-	struct twi_gb_test_cpu_args8 args8;
 	
-	// LD r, r
-	args8.name = "LD r, r";
-	args8.prog_sz = sizeof(LD_r_r_ops);
-	args8.prog = LD_r_r_ops;
-	args8.op = LD8;
-	args8.lhs_type = args8.rhs_type = TWI_GB_TEST_CPU_OPTYPE_REG8;
-	args8.lhs_sz = args8.rhs_sz = sizeof(reg8_set);
-	args8.lhs = args8.rhs = reg8_set;
-	args8.pc_per_op = 1;
-	args8.div_per_op = 4;
-	fail_count += cputest8(&args8);
+	//-------------------------------------------------------
+	// LD8
+	{ // LD r, r
+		static const uint8_t prog[] = { // rhs: B,C,D,E,H,L,A
+			0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x47, // LD B, r
+			0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4F, // LD C, r
+			0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x57, // LD D, r
+			0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5F, // LD E, r
+			0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x67, // LD H, r
+			0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6F, // LD L, r
+			0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7F  // LD A, r
+		};
+		fail_count += testcpu8(
+				"LD r, r", sizeof(prog), prog, LD8,
+				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set,
+				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set,
+				1, 4
+		);
+	} // end LD r, r
+	
+	{ // LD r, (HL)
+		static const uint8_t prog[] = { // lhs: B,C,D,E,H,L,A
+			0x46, 0x4E, 0x56, 0x5E, 0x66, 0x6E, 0x7E // LD r, (HL)
+		};
+		fail_count += testcpu8(
+				"LD r, (HL)", sizeof(prog), prog, LD8,
+				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set,
+				TESTCPU_TYPE_REG16PTR, sizeof(HL_set), HL_set,
+				1, 8
+		);
+	} // end LD r, (HL)
+
+	{ // LD r, n
+		static const uint8_t prog[] = { // lhs: B,C,D,E,H,L,A
+			0x06, 0x0E, 0x16, 0x1E, 0x26, 0x2E, 0x3E // LD r, n
+		};
+		fail_count += testcpu8(
+				"LD r, n", sizeof(prog), prog, LD8,
+				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set,
+				TESTCPU_TYPE_IMMED8, 0, NULL,
+				2, 8
+		);
+	} // end LD r, n
+	
+	{ // LD (HL), r
+		static const uint8_t prog[] = { // rhs: B,C,D,E,H,L,A
+			0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x77 // LD (HL), r
+		};
+		fail_count += testcpu8(
+				"LD (HL), r", sizeof(prog), prog, LD8,
+				TESTCPU_TYPE_REG16PTR, sizeof(HL_set), HL_set,
+				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set,
+				1, 8
+		);
+	}
+
+	{ // LD (HL), n
+		static const uint8_t prog = 0x36;
+		fail_count += testcpu8(
+				"LD (HL), n", 1, &prog, LD8,
+				TESTCPU_TYPE_REG16PTR, sizeof(HL_set), HL_set,
+				TESTCPU_TYPE_IMMED8, 0, NULL,
+				2, 12
+		);
+	}
 
 	return fail_count;
 } // end twi_gb_test_cpu_all()
@@ -178,64 +169,91 @@ twi_gb_test_cpu_all() {
 //=======================================================================
 
 //=======================================================================
-// def getval8()
+// def setrand8()
 // TODO
 //=======================================================================
-
-//=======================================================================
-// def setval8()
-// TODO
-//=======================================================================
-void
-setval8(
-		struct twi_gb_cpu* restrict cpu,
-		struct twi_gb_mem* restrict mem,
-		enum twi_gb_test_cpu_optype8 type,
-		uint8_t idx,
-		uint8_t val
+uint8_t
+testcpu_setrand8(
+		struct twi_gb_cpu* restrict cpu1,
+		struct twi_gb_cpu* restrict cpu2,
+		struct twi_gb_mem* restrict mem1,
+		struct twi_gb_mem* restrict mem2,
+		enum testcpu_type type,
+		uint8_t idx
 ) {
-	twi_assert_notnull(cpu);
-	twi_assert_notnull(mem);
+	twi_assert_notnull(cpu1);
+	twi_assert_notnull(cpu2);
+	twi_assert_notnull(mem1);
+	twi_assert_notnull(mem2);
 
-	if (type == TWI_GB_TEST_CPU_OPTYPE_REG8)
-		REG8(cpu, idx) = val;
-	else if (type == TWI_GB_TEST_CPU_OPTYPE_REG16PTR)
-		twi_gb_mem_write8(mem, REG16(cpu, idx), val);
-	else if (type == TWI_GB_TEST_CPU_OPTYPE_IMMED8)
-		mem->map[cpu->pc + 1] = val;
-} // end setval8()
+	uint8_t val = rand() % 0x100;
+	if (type == TESTCPU_TYPE_REG8) {
+		REG8(cpu1, idx) = REG8(cpu2, idx) = val;
+	} else if (type == TESTCPU_TYPE_REG16PTR) {
+		// The randomized value will need to be assigned to
+		// a randomized address in working RAM (WRAM).
+		// The address should be assigned to the specified 16-bit register.
+		uint16_t addr = rand() % TWI_GB_MEM_SZ_WRAM_DMG + FX_WRAM_BEGIN;
+		REG16(cpu1, idx) = REG16(cpu2, idx) = addr;
+		twi_gb_mem_write8(mem1, addr, val);
+		twi_gb_mem_write8(mem2, addr, val);
+	}
+
+	return val;
+} // end setrand8()
 
 //=======================================================================
-// def set_program()
+// def testcpu_setprog()
 //
 // Unsafely force-assigns a program into a twi-gb-mem object.
 // This action is not supported by the twi-gb-mem interface, and thus
 // all attempts to do this for testing should go through here, in order
 // for this action to be adaptable to change.
+//
+// Note that final program size (after addition of immediate bytes) can
+// not exceed 32,768 bytes. Therefore, the following should assert true:
+// (program_sz * (immed_bytes + 1)) <= 32,768
+// Otherwise, behavior is undefined.
 //-----------------------------------------------------------------------
 // Parameters:
 // * mem: Target of the program assignment.
 // * program_sz: The number of bytes of which the program consists.
-//   Should not exceed 32,768.
 // * program: The program to load.
+// * immed_bytes: Each byte of `program` written to `mem` will be prefixed
+//   by a number equal to `immed_bytes` of random-value bytes.
+//   These simulate immediates that the instructions would otherwise
+//   accept.
+//   Must be less than or equal to 2, else behavior is undefined.
 //=======================================================================
 static void
-set_program(
+testcpu_setprog(
 		struct twi_gb_mem* restrict mem,
-		uint16_t program_sz,
-		const void* restrict program
+		uint_fast16_t program_sz,
+		const uint8_t* restrict program,
+		uint_fast8_t immed_bytes
 ) {
 	twi_assert_notnull(mem);
-	twi_assert_lteqi(program_sz, 32768);
+	twi_assert_lteqi((program_sz * (immed_bytes + 1)), 32768);
 	twi_assert_notnull(program);
-	memcpy(mem, program, program_sz);
-} // end set_program()
+	twi_assert_lteqi(immed_bytes, 2);
+
+	if (immed_bytes == 0)
+		memcpy(mem, program, program_sz);
+	else {
+		// Add random immediate bytes after each instruction
+		for (uint_fast16_t i = 0, m	= 0; i < program_sz; ++i) {
+			mem->map[m++] = program[i];
+			for (uint_fast8_t r = 0; r < immed_bytes; ++r)
+				mem->map[m++] = rand() % 0x100;
+		} // end iteration through program
+	} // end if immediate bytes must be inserted
+} // end testcpu_setprog()
 
 //=======================================================================
-// def twi_gb_test_cpu_init()
+// def testcpu_reset()
 // TODO
 //=======================================================================
-static void test_cpu_reset(struct twi_gb_cpu* restrict cpu) {
+static void testcpu_reset(struct twi_gb_cpu* restrict cpu) {
 	twi_assert_notnull(cpu);
 
 	for (uint_fast8_t i = 0; i < sizeof(cpu->reg); ++i)
@@ -243,7 +261,7 @@ static void test_cpu_reset(struct twi_gb_cpu* restrict cpu) {
 	cpu->sp = 0;
 	cpu->pc = 0;
 	cpu->div = 0;
-} // end test_twi_gb_cpu_init()
+} // end testcpu_reset()
 
 // Redefine PTR macros defined in twi-gb to use local variables.
 #undef CPU_PTR
@@ -257,7 +275,7 @@ static void test_cpu_reset(struct twi_gb_cpu* restrict cpu) {
 static int_fast8_t
 test_register_coherency() {
 	struct twi_gb_cpu cpu;
-	test_cpu_reset(&cpu);
+	testcpu_reset(&cpu);
 	// Test r-to-rr coherency. Values are arbitrary.
 	REG_A = 0xA6;
 	REG_F = 0x11;
@@ -308,107 +326,134 @@ test_fail:
 } // end test_register_coherency()
 
 //=======================================================================
-// def cputest8()
+// def testcpu8()
 //
 // Polymorphic testing function for testing the correctness of
 // the implementation of twi-gb-cpu instructions which accept 8-bit
 // operands.
 //-----------------------------------------------------------------------
 // Parameters:
-// * args: Test arguments.
-//   See description of struct twi_gb_test_cpu_args8 for details.
+// * name: The name of the test. Used when reporting failures.
+// * prog_sz: The size of the test program in bytes.
+// * prog: The test program to run.
+// * op: The operation function to use in calculating expected result.
+//   Behavior is undefined if `op` does not point to a function of
+//   the specified signature.
+// * lhs_type: The type of the left-hand side argument.
+//   Can be either REG8 or REG16PTR.
+//   Behavior is undefined if any other operand type is specified.
+// * lhs_sz: The number of elements in the array pointed to by `lhs`.
+// * lhs: Pointer to an array of register indices to use as arguments.
+//   Behavior is undefined if `lhs` does not point to an array of indices
+//   with at least `lhs_sz` number of elements.
+// * rhs_type: The type of the right-hand side arguments.
+//   If either IMMED8 or NONE, `rhs_sz` and `rhs` are ignored.
+// * rhs_sz: The number of elements in the array pointed to by `rhs`.
+// * rhs: Pointer to an array of register indices to use as arguments.
+//   Behavior is undefined if `rhs` does not point to an array of indices
+//   with at least `rhs_sz` number of elements.
+// * pc_per_op: The number of instructions to expect the instruction
+//   pointer to advance after each instruction.
+// * div_per_op: The number of clock cycles to expect the emulated CPU
+//   to advance after each instruction.
 //
 // Returns: 0 on success, 1 on failure
 //=======================================================================
 static int_fast8_t
-cputest8(const struct twi_gb_test_cpu_args8* restrict args) {
-	twi_assertf(args->lhs_type != TWI_GB_TEST_CPU_OPTYPE_RBIT
-			     && args->lhs_type != TWI_GB_TEST_CPU_OPTYPE_WBIT,
+testcpu8(
+		const char* restrict name,
+		uint_fast16_t prog_sz,
+		const uint8_t* restrict prog,
+		uint8_t (*op)(uint8_t* restrict, uint8_t, uint8_t),
+		enum testcpu_type lhs_type,
+		uint_fast8_t lhs_sz,
+		const uint8_t lhs[lhs_sz],
+		enum testcpu_type rhs_type,
+		uint_fast8_t rhs_sz,
+		const uint8_t rhs[rhs_sz],
+		uint_fast8_t pc_per_op,
+		uint_fast8_t div_per_op
+) {
+	twi_assertf(lhs_type != TESTCPU_TYPE_RBIT
+			     && lhs_type != TESTCPU_TYPE_WBIT,
 			"Left-hand side argument(s) cannot be bit offsets.");
-	twi_assertf(args->lhs_type != TWI_GB_TEST_CPU_OPTYPE_IMMED8,
+	twi_assertf(lhs_type != TESTCPU_TYPE_IMMED8,
 			"Left-hand side argument(s) cannot be immediates.");
-	twi_assertf(args->lhs_type != TWI_GB_TEST_CPU_OPTYPE_NONE,
+	twi_assertf(lhs_type != TESTCPU_TYPE_NONE,
 			"Left-hand side argument(s) must be present for this test format.");
 
 	// The control and test CPU and memory map.
 	struct twi_gb_cpu expected_cpu, actual_cpu;
 	struct twi_gb_mem expected_mem, actual_mem;
-	test_cpu_reset(&expected_cpu);
-	set_program(&expected_mem, args->prog_sz, args->prog);
+	testcpu_reset(&expected_cpu);
+	testcpu_setprog(&expected_mem, prog_sz, prog, rhs_type == TESTCPU_TYPE_IMMED8 ? 1 : 0);
 	memcpy(&actual_cpu, &expected_cpu, sizeof(struct twi_gb_cpu));
 	memcpy(&actual_mem, &expected_mem, sizeof(struct twi_gb_mem));
 
-	if (args->rhs_type == TWI_GB_TEST_CPU_OPTYPE_REG8
-	 || args->rhs_type == TWI_GB_TEST_CPU_OPTYPE_REG16PTR
-	 || args->rhs_type == TWI_GB_TEST_CPU_OPTYPE_RBIT
-	 || args->rhs_type == TWI_GB_TEST_CPU_OPTYPE_WBIT) {
-		// `rhs` is used
+	// If `rhs_type` is IMMED8 or NONE, then `rhs` is unused.
+	// The inner loop should run once.
+	// Loop logic will not utilize `rhs` values when inappropriate.
+	uint8_t internal_rhs_sz;
+	if (rhs_type == TESTCPU_TYPE_IMMED8
+	 || rhs_type == TESTCPU_TYPE_NONE)
+		rhs_sz = 1;
 
-		uint8_t lhs_val, rhs_val;
-		for (uint8_t lhs_pos = 0; lhs_pos < args->lhs_sz; ++lhs_pos) {
-			for (uint8_t rhs_pos = 0; rhs_pos < args->rhs_sz; ++rhs_pos) {
-				// Use pseudorandom test values.
-				lhs_val = rand() % 0x100;
-				if (args->rhs_type == TWI_GB_TEST_CPU_OPTYPE_REG8
-				 || args->rhs_type == TWI_GB_TEST_CPU_OPTYPE_REG16PTR)
-					rhs_val = rand() % 0x100;
-				else // rhs is hard-coded and never random, so use the actual value
-					rhs_val = args->rhs[rhs_pos];
+	for (uint8_t lhs_pos = 0; lhs_pos < lhs_sz; ++lhs_pos) {
+		for (uint8_t rhs_pos = 0; rhs_pos < rhs_sz; ++rhs_pos) {
+			// Use pseudorandom test values
+			// Prepare expected and actual components for test.
+			uint8_t lhs_val = testcpu_setrand8(
+					&expected_cpu, &actual_cpu,
+					&expected_mem, &actual_mem,
+					lhs_type, lhs[lhs_pos]
+			);
 
-				// Prepare expected and actual components for test.
-				setval8(&expected_cpu, &expected_mem, args->lhs_type, args->lhs[lhs_pos], lhs_val);
-				setval8(&expected_cpu, &expected_mem, args->rhs_type, args->rhs[rhs_pos], rhs_val);
-				setval8(&actual_cpu, &actual_mem, args->lhs_type, args->lhs[lhs_pos], lhs_val);
-				setval8(&actual_cpu, &actual_mem, args->rhs_type, args->rhs[rhs_pos], rhs_val);
+			uint8_t rhs_val;
+			if (rhs_type == TESTCPU_TYPE_REG8
+			 || rhs_type == TESTCPU_TYPE_REG16PTR) {
+				rhs_val = testcpu_setrand8(
+						&expected_cpu, &actual_cpu,
+						&expected_mem, &actual_mem,
+						rhs_type, rhs[rhs_pos]
+				);
+			} else if (rhs_type == TESTCPU_TYPE_RBIT
+			        || rhs_type == TESTCPU_TYPE_WBIT) {
+				// rhs is hard-coded into the instruction itself
+				rhs_val = rhs[rhs_pos];
+			} else if (rhs_type == TESTCPU_TYPE_IMMED8) {
+				// rhs was randomly-generated when setting the program
+				rhs_val = twi_gb_mem_read8(&expected_mem, expected_cpu.pc + 1);
+			} else { // TESTCPU_TYPE_NONE
+				// rhs value will be discarded by instruction and thus is irrelevant.
+				rhs_val = 0;
+			}
 
-				// Evaluate result, and simulate in expected components.
-				uint8_t result = args->op(&REG8(&expected_cpu, IDX_F), lhs_val, rhs_val);
-				if (args->rhs_type != TWI_GB_TEST_CPU_OPTYPE_RBIT)
-					setval8(&expected_cpu, &expected_mem, args->lhs_type, args->lhs[lhs_pos], result);
-				expected_cpu.pc += args->pc_per_op;
-				expected_cpu.div += args->div_per_op;
+			// Evaluate result, and simulate in expected components.
+			uint8_t result = op(&REG8(&expected_cpu, IDX_F), lhs_val, rhs_val);
+			if (rhs_type != TESTCPU_TYPE_RBIT) { // No non-F writes occur with RBIT.
+				if (lhs_type == TESTCPU_TYPE_REG8)
+					REG8(&expected_cpu, lhs[lhs_pos]) = result;
+				else // REG16PTR
+					twi_gb_mem_write8(&expected_mem, REG16(&expected_cpu, lhs[lhs_pos]), result);
+			} // end if assignment of non-F result occurs
+			expected_cpu.pc += pc_per_op;
+			expected_cpu.div += div_per_op;
 
-				// Execute instruction in actual components.
-				interpret_once(&actual_cpu, &actual_mem);
+			// Execute instruction in actual components.
+			interpret_once(&actual_cpu, &actual_mem);
 
-				// Compare (twi_test will jump to the `test_fail` label on failure).
-				twi_test(!memcmp(&expected_cpu, &actual_cpu, sizeof(struct twi_gb_cpu)));
-				twi_test(!memcmp(&expected_mem, &actual_mem, sizeof(struct twi_gb_mem)));
-			} // end iteration through `rhs`
-		} // end iteration through `lhs`
-	} else {
-		// `rhs` is unused
-	} // end if/else `rhs` is used
+			// Compare (twi_test will jump to the `test_fail` label on failure).
+			twi_test(!memcmp(&expected_cpu, &actual_cpu, sizeof(struct twi_gb_cpu)));
+			twi_test(!memcmp(&expected_mem, &actual_mem, sizeof(struct twi_gb_mem)));
+		} // end iteration through `rhs`
+	} // end iteration through `lhs`
 
 	return 0;
 test_fail: // Jumped to by twi_test().
 	fprintf(stderr, "Test name: %s\nOpcode: 0x%" PRIX8 "\n",
-			args->name, args->prog[expected_cpu.pc - args->pc_per_op]);
+			name, twi_gb_mem_read8(&expected_mem, expected_cpu.pc - pc_per_op));
 	twi_gb_cpu_diffdump(stderr, "expected", &expected_cpu, "actual", &actual_cpu);
 	// TODO: mem diffdump
 	return 1;
-} // end cputest8()
-
-//=======================================================================
-// def test_LD_R_HL()
-//
-// Tests the functionality of memory-to-register loads.
-//-----------------------------------------------------------------------
-// Returns: 0 on success, 1 on failure
-//=======================================================================
-//static int_fast8_t
-//test_LD_R_HL() {
-//	struct twi_gb_cpu cpu;
-//	struct twi_gb_mem mem;
-//	// LD B/C/D/E/H/L/A, (HL)
-//	test_cpu_init(&cpu);
-//	twi_gb_mem_init(&mem, NULL, NULL, TWI_GB_MODE_DMG);
-//	uint8_t program[] = {0x46, 0x4E, 0x56, 0x5E, 0x66, 0x6E, 0x7E};
-//	set_program(&mem, sizeof(program), program);
-//	uint8_t* reg[] = {&REG_B, &REG_C, &REG_D, &REG_E, &REG_H, &REG_L, &REG_A};
-//
-//	uint8_t num = 107; // Arbitrary.
-//	uint32_t addr = 0xC000; // Arbitary, but must exist inside WRAM.
-//	return 0; // TODO
-//}
+} // end testcpu8()
 
