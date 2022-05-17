@@ -21,7 +21,6 @@ endef
 # to link.
 define twi_gb_test_src
 	log.c
-	mem.c
 endef
 #========================================================================
 # DO NOT MODIFY ANYTHING BELOW THIS POINT
