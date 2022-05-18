@@ -23,6 +23,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <twi/std/assertf.h>
 #include <twi/std/test.h>
 
@@ -59,22 +60,49 @@ enum testcpu_type8 {
 
 //=======================================================================
 //-----------------------------------------------------------------------
+// Private constants
+//-----------------------------------------------------------------------
+//=======================================================================
+// Set of register indices of B, C, D, E, H, L, & A, in that order.
+static const uint8_t reg8_set[] = {
+	IDX_B, IDX_C, IDX_D, IDX_E, IDX_H, IDX_L, IDX_A
+};
+// Set of just the index of the A register.
+static const uint8_t A_set[] = { IDX_A };
+// Set of just the index of the HL register.
+static const uint8_t HL_set[] = { IDX_HL };
+
+//=======================================================================
+//-----------------------------------------------------------------------
 // Private function declarations
 //-----------------------------------------------------------------------
 //=======================================================================
-// Tests
-static int_fast8_t test_register_coherency();
-static int_fast8_t testcpu8(
+// Sub-tests
+static int_fast8_t testcpu_register_coherency();
+static size_t testcpu_arithmetic_integration();
+// Helper functions
+static void testcpu_init(struct twi_gb_cpu* restrict);
+static void testcpu_setprog(
+		struct twi_gb_mem* restrict, uint_fast16_t,
+		const uint8_t* restrict, uint_fast8_t
+);
+static uint_fast8_t testcpu8(
 		const char* restrict, uint_fast16_t, const uint8_t* restrict,
 		uint8_t (*)(uint8_t* restrict, uint8_t, uint8_t),
 		uint_fast8_t, uint_fast8_t, uint_fast8_t,
 		enum testcpu_type8, uint_fast8_t, const uint8_t[],
 		enum testcpu_type8, uint_fast8_t, const uint8_t[]
 );
+static uint_fast8_t
+testcpu_arith28(
+		const char*, uint8_t,
+		uint8_t (*)(uint8_t* restrict, uint8_t, uint8_t),
+		uint_fast8_t
+);
 
 //=======================================================================
 //-----------------------------------------------------------------------
-// Public function definitions
+// Master test
 //-----------------------------------------------------------------------
 //=======================================================================
 
@@ -84,7 +112,6 @@ static int_fast8_t testcpu8(
 size_t
 twi_gb_test_cpu_all() {
 	// Operand sets.
-	srand(2);
 	static const uint8_t reg8_set[] = {
 		IDX_B, IDX_C, IDX_D, IDX_E, IDX_H, IDX_L, IDX_A
 	};
@@ -92,7 +119,7 @@ twi_gb_test_cpu_all() {
 	static const uint8_t A_set[] = { IDX_A };
 
 	size_t fail_count = 0;
-	fail_count += test_register_coherency();
+	fail_count += testcpu_register_coherency();
 	
 	//-------------------------------------------------------
 	// LD8
@@ -154,62 +181,119 @@ twi_gb_test_cpu_all() {
 				TESTCPU_TYPE_IMMED8, 0, NULL
 		);
 	} // end LD (HL), n
-
-	//-------------------------------------------------------
-	// 8-bit arithmetic
-	{ // begin ADD A, r
-		static const uint8_t prog[] = { // rhs: B,C,D,E,H,L,A
-			0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x87 // ADD A, r
-		};
-		fail_count += testcpu8(
-				"ADD A, r", sizeof(prog), prog, ADD8, 1, 4, 1,
-				TESTCPU_TYPE_REG8, sizeof(A_set), A_set,
-				TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set
-		);
-	} // end ADD A, r
+	
+	fail_count += testcpu_arithmetic_integration();
 
 	return fail_count;
 } // end twi_gb_test_cpu_all()
 
 //=======================================================================
 //-----------------------------------------------------------------------
-// Private function definitions
+// Sub-tests
 //-----------------------------------------------------------------------
 //=======================================================================
 
 //=======================================================================
-// def setrand8()
+// def testcpu_register_coherency()
+//=======================================================================
+static int_fast8_t
+testcpu_register_coherency() {
+// Redefine CPU_PTR macro defined in twi/gc/cpu.c to use local variables.
+#undef CPU_PTR
+#define CPU_PTR (&cpu)
+
+	struct twi_gb_cpu cpu;
+	testcpu_init(&cpu);
+	// Test r-to-rr coherency. Values are arbitrary.
+	REG_A = 0xA6;
+	REG_F = 0x11;
+	REG_B = 0xE2;
+	REG_C = 0x39;
+	REG_D = 0x57;
+	REG_E = 0x85;
+	REG_H = 0x80;
+	REG_L = 0x0;
+	twi_test(REG_AF == 0xA611);
+	twi_test(REG_BC == 0xE239);
+	twi_test(REG_DE == 0x5785);
+	twi_test(REG_HL == 0x8000);
+	// Test rr-to-r coherency. Values are arbitrary.
+	REG_AF = 0x1234;
+	REG_BC = 0x9581;
+	REG_DE = 0xABC9;
+	REG_HL = 0x82F7;
+	twi_test(REG_A == 0x12);
+	twi_test(REG_F == 0x34);
+	twi_test(REG_B == 0x95);
+	twi_test(REG_C == 0x81);
+	twi_test(REG_D == 0xAB);
+	twi_test(REG_E == 0xC9);
+	twi_test(REG_H == 0x82);
+	twi_test(REG_L == 0xF7);
+	return 0;
+
+test_fail:
+	fprintf(stderr,
+		"REG_A = 0x%" PRIX8 "\n"
+		"REG_F = 0x%" PRIX8 "\n"
+		"REG_B = 0x%" PRIX8 "\n"
+		"REG_C = 0x%" PRIX8 "\n"
+		"REG_D = 0x%" PRIX8 "\n"
+		"REG_E = 0x%" PRIX8 "\n"
+		"REG_H = 0x%" PRIX8 "\n"
+		"REG_L = 0x%" PRIX8 "\n"
+		"REG_AF = 0x%" PRIX16 "\n"
+		"REG_BC = 0x%" PRIX16 "\n"
+		"REG_DE = 0x%" PRIX16 "\n"
+		"REG_HL = 0x%" PRIX16 "\n",
+		REG_A, REG_F, REG_B, REG_C,
+		REG_D, REG_E, REG_H, REG_L,
+		REG_AF, REG_BC, REG_DE, REG_HL
+	);
+	return 1;
+} // end testcpu_register_coherency()
+
+//=======================================================================
+// def testcpu_arithmetic_integration()
+//
+// Runs tests to check that the CPU responds to arithmetic requests as
+// expected.
+//-----------------------------------------------------------------------
+// Returns: The number of tests that failed.
+//=======================================================================
+size_t
+testcpu_arithmetic_integration() {
+	size_t fail_count;
+	fail_count += testcpu_arith28("ADD", 0x80, ADD8, 1);
+	fail_count += testcpu_arith28("ADC", 0x88, ADC, 1);
+	fail_count += testcpu_arith28("SUB", 0x90, SUB, 1);
+	fail_count += testcpu_arith28("SBC", 0x98, SBC, 1);
+	fail_count += testcpu_arith28("AND", 0xA0, AND, 1);
+	fail_count += testcpu_arith28("XOR", 0xA8, XOR, 1);
+	fail_count += testcpu_arith28("OR", 0xB0, OR, 1);
+	fail_count += testcpu_arith28("CP", 0xB8, SUB, 0);
+	return fail_count;
+} // end testcpu_arithmetic_integration()
+
+//=======================================================================
+//-----------------------------------------------------------------------
+// Helper functions
+//-----------------------------------------------------------------------
+//=======================================================================
+
+//=======================================================================
+// def testcpu_init()
 // TODO
 //=======================================================================
-uint8_t
-testcpu_setrand8(
-		struct twi_gb_cpu* restrict cpu1,
-		struct twi_gb_cpu* restrict cpu2,
-		struct twi_gb_mem* restrict mem1,
-		struct twi_gb_mem* restrict mem2,
-		enum testcpu_type8 type,
-		uint8_t idx
-) {
-	twi_assert_notnull(cpu1);
-	twi_assert_notnull(cpu2);
-	twi_assert_notnull(mem1);
-	twi_assert_notnull(mem2);
+static void testcpu_init(struct twi_gb_cpu* restrict cpu) {
+	twi_assert_notnull(cpu);
 
-	uint8_t val = rand() % 0x100;
-	if (type == TESTCPU_TYPE_REG8) {
-		REG8(cpu1, idx) = REG8(cpu2, idx) = val;
-	} else if (type == TESTCPU_TYPE_REG16PTR) {
-		// The randomized value will need to be assigned to
-		// a randomized address in working RAM (WRAM).
-		// The address should be assigned to the specified 16-bit register.
-		uint16_t addr = rand() % TWI_GB_MEM_SZ_WRAM_DMG + FX_WRAM_BEGIN;
-		REG16(cpu1, idx) = REG16(cpu2, idx) = addr;
-		twi_gb_mem_write8(mem1, addr, val);
-		twi_gb_mem_write8(mem2, addr, val);
-	}
-
-	return val;
-} // end setrand8()
+	for (uint_fast8_t i = 0; i < sizeof(cpu->reg); ++i)
+		cpu->reg[i] = 0;
+	cpu->sp = 0;
+	cpu->pc = 0;
+	cpu->div = 0;
+} // end testcpu_init()
 
 //=======================================================================
 // def testcpu_setprog()
@@ -259,80 +343,38 @@ testcpu_setprog(
 } // end testcpu_setprog()
 
 //=======================================================================
-// def testcpu_reset()
+// def testcpu_setrand8()
 // TODO
 //=======================================================================
-static void testcpu_reset(struct twi_gb_cpu* restrict cpu) {
-	twi_assert_notnull(cpu);
+uint8_t
+testcpu_setrand8(
+		struct twi_gb_cpu* restrict cpu1,
+		struct twi_gb_cpu* restrict cpu2,
+		struct twi_gb_mem* restrict mem1,
+		struct twi_gb_mem* restrict mem2,
+		enum testcpu_type8 type,
+		uint8_t idx
+) {
+	twi_assert_notnull(cpu1);
+	twi_assert_notnull(cpu2);
+	twi_assert_notnull(mem1);
+	twi_assert_notnull(mem2);
 
-	for (uint_fast8_t i = 0; i < sizeof(cpu->reg); ++i)
-		cpu->reg[i] = 0;
-	cpu->sp = 0;
-	cpu->pc = 0;
-	cpu->div = 0;
-} // end testcpu_reset()
+	uint8_t val = rand() % 0x100;
+	if (type == TESTCPU_TYPE_REG8) {
+		REG8(cpu1, idx) = REG8(cpu2, idx) = val;
+	} else if (type == TESTCPU_TYPE_REG16PTR) {
+		// The randomized value will need to be assigned to
+		// a randomized address in working RAM (WRAM).
+		// The address should be assigned to the specified 16-bit register.
+		uint16_t addr = rand() % TWI_GB_MEM_SZ_WRAM_DMG + FX_WRAM_BEGIN;
+		REG16(cpu1, idx) = REG16(cpu2, idx) = addr;
+		twi_gb_mem_write8(mem1, addr, val);
+		twi_gb_mem_write8(mem2, addr, val);
+	}
 
-// Redefine PTR macros defined in twi-gb to use local variables.
-#undef CPU_PTR
-#undef MEM
-#define CPU_PTR (&cpu)
-#define MEM (&mem)
-
-//=======================================================================
-// def test_register_coherency()
-//=======================================================================
-static int_fast8_t
-test_register_coherency() {
-	struct twi_gb_cpu cpu;
-	testcpu_reset(&cpu);
-	// Test r-to-rr coherency. Values are arbitrary.
-	REG_A = 0xA6;
-	REG_F = 0x11;
-	REG_B = 0xE2;
-	REG_C = 0x39;
-	REG_D = 0x57;
-	REG_E = 0x85;
-	REG_H = 0x80;
-	REG_L = 0x0;
-	twi_test(REG_AF == 0xA611);
-	twi_test(REG_BC == 0xE239);
-	twi_test(REG_DE == 0x5785);
-	twi_test(REG_HL == 0x8000);
-	// Test rr-to-r coherency. Values are arbitrary.
-	REG_AF = 0x1234;
-	REG_BC = 0x9581;
-	REG_DE = 0xABC9;
-	REG_HL = 0x82F7;
-	twi_test(REG_A == 0x12);
-	twi_test(REG_F == 0x34);
-	twi_test(REG_B == 0x95);
-	twi_test(REG_C == 0x81);
-	twi_test(REG_D == 0xAB);
-	twi_test(REG_E == 0xC9);
-	twi_test(REG_H == 0x82);
-	twi_test(REG_L == 0xF7);
-	return 0;
-
-test_fail:
-	fprintf(stderr,
-		"REG_A = 0x%" PRIX8 "\n"
-		"REG_F = 0x%" PRIX8 "\n"
-		"REG_B = 0x%" PRIX8 "\n"
-		"REG_C = 0x%" PRIX8 "\n"
-		"REG_D = 0x%" PRIX8 "\n"
-		"REG_E = 0x%" PRIX8 "\n"
-		"REG_H = 0x%" PRIX8 "\n"
-		"REG_L = 0x%" PRIX8 "\n"
-		"REG_AF = 0x%" PRIX16 "\n"
-		"REG_BC = 0x%" PRIX16 "\n"
-		"REG_DE = 0x%" PRIX16 "\n"
-		"REG_HL = 0x%" PRIX16 "\n",
-		REG_A, REG_F, REG_B, REG_C,
-		REG_D, REG_E, REG_H, REG_L,
-		REG_AF, REG_BC, REG_DE, REG_HL
-	);
-	return 1;
-} // end test_register_coherency()
+	return val;
+} // end testcpu_setrand8()
 
 //=======================================================================
 // def testcpu8()
@@ -377,7 +419,7 @@ test_fail:
 //
 // Returns: 0 on success, 1 on failure
 //=======================================================================
-static int_fast8_t
+static uint_fast8_t
 testcpu8(
 		const char* restrict name,
 		uint_fast16_t prog_sz,
@@ -403,7 +445,7 @@ testcpu8(
 	// The control and test CPU and memory map.
 	struct twi_gb_cpu expected_cpu, actual_cpu;
 	struct twi_gb_mem expected_mem, actual_mem;
-	testcpu_reset(&expected_cpu);
+	testcpu_init(&expected_cpu);
 	testcpu_setprog(&expected_mem, prog_sz, prog, rhs_type == TESTCPU_TYPE_IMMED8 ? 1 : 0);
 	memcpy(&actual_cpu, &expected_cpu, sizeof(struct twi_gb_cpu));
 	memcpy(&actual_mem, &expected_mem, sizeof(struct twi_gb_mem));
@@ -480,4 +522,77 @@ test_fail: // Jumped to by twi_test().
 	// TODO: mem diffdump
 	return 1;
 } // end testcpu8()
+
+//=======================================================================
+// def testcpu_arith28
+//
+// Runs tests for an 8-bit arithmetic instruction which accepts 2 operands.
+//
+// The lhs operand will always be the A register.
+// The rhs operand will be one of: B, C, D, E, H, L, (HL), A, or n.
+//-----------------------------------------------------------------------
+// Parameters:
+// * op_name: The name of the instruction being tested.
+//   Behavior is undefined if `op_name` does not point to a
+//   NULL-terminated character array.
+// * B_opcode: The opcode for the instruction of this operation which
+//   uses the 8-bit register B as its rhs argument.
+// * op: The operation function.
+//   Behavior is undefined if `op` does not point to a function of the
+//   specified signature.
+//   * First argument should accept a pointer to a flag register.
+//   * Second argument should accept the left-hand side value.
+//   * Third argument should accept the right-hand side value.
+//   * Should return the result of the operation.
+// * writeback: If non-zero, tests will expect the result returned by
+//   `op` to be written to the A register. Else tests will expect the
+//   result returned by `op` to be discarded and for the register A's
+//   value to remain unchanged.
+//
+// Returns: The number of tests which failed.
+//=======================================================================
+static uint_fast8_t
+testcpu_arith28(
+		const char* op_name,
+		uint8_t B_opcode,
+		uint8_t (*op)(uint8_t* restrict, uint8_t, uint8_t),
+		uint_fast8_t writeback
+) {
+	static const uint_fast8_t LONGEST_POSTFIX_LEN = 8;
+
+	size_t op_name_len = strlen(op_name);
+	uint8_t name[op_name_len + LONGEST_POSTFIX_LEN + 1];
+	strcpy(name, op_name);
+	// rhs: B, C, D, E, H, L, A
+	strcat(name, " A, r");
+	uint8_t prog[] = {
+		B_opcode, B_opcode+1, B_opcode+2, B_opcode+3,
+		B_opcode+4, B_opcode+5, B_opcode+7
+	};
+	int_fast8_t fail_count = testcpu8(name, sizeof(prog), prog, op, 1, 4, writeback,
+			TESTCPU_TYPE_REG8, sizeof(A_set), A_set,
+			TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set
+	);
+
+	// rhs: (HL)
+	name[op_name_len] = 0; // Cut off postfix.
+	strcat(name, " A, (HL)");
+	prog[0] = B_opcode + 6;
+	fail_count += testcpu8(name, 1, prog, op, 1, 8, writeback,
+			TESTCPU_TYPE_REG8, sizeof(A_set), A_set,
+			TESTCPU_TYPE_REG16PTR, sizeof(HL_set), HL_set
+	);
+
+	// rhs: n
+	name[op_name_len] = 0; // Cut off postfix.
+	strcat(name, " A, n");
+	prog[0] = B_opcode + 0x46; // Standard offset of 8-bit immediate version.
+	fail_count += testcpu8(name, 1, prog, op, 2, 8, writeback,
+			TESTCPU_TYPE_REG8, sizeof(A_set), A_set,
+			TESTCPU_TYPE_IMMED8, 0, NULL
+	);
+
+	return fail_count;
+} // end testcpu_arith28()
+
 
