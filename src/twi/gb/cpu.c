@@ -41,7 +41,7 @@
 // variable names/types. Primarily useful in testing.
 //=======================================================================
 #define CPU_PTR (cpu)
-#define MEM (*mem)
+#define MEM_PTR (mem)
 
 //=======================================================================
 // Macros providing abbreviated signatures for common read/write/access
@@ -53,9 +53,9 @@
 #define REG8(cpu_ptr, idx) ((cpu_ptr)->reg[idx])
 #define REG16(cpu_ptr, idx) (*((uint16_t*)((cpu_ptr)->reg + (idx))))
 // Read 8-bit memory
-#define RMEM8(addr) twi_gb_mem_read8(&MEM, addr)
+#define RMEM8(addr) twi_gb_mem_read8(MEM_PTR, addr)
 // Write 8-bit memory
-#define WMEM8(addr, val) twi_gb_mem_write8(&MEM, addr, val)
+#define WMEM8(addr, val) twi_gb_mem_write8(MEM_PTR, addr, val)
 // Read unsigned 8-bit immediate
 #define IMMED8 (RMEM8((CPU_PTR)->pc + 1))
 // Read unsigned 16-bit immediate
@@ -127,7 +127,32 @@
 #define REG_SP ((CPU_PTR)->sp)
 
 //=======================================================================
-// decl ADV()
+// Flag manipulation and retrieval functions.
+//=======================================================================
+
+// Flag bit offsets
+#define FBIT_Z 7
+#define FBIT_N 6
+#define FBIT_H 5
+#define FBIT_C 4
+
+// Set flag bits.
+// f_ptr: Pointer to flag value.
+// z: Zero flag bit, 1 or 0
+// n: Negative flag bit, 1 or 0
+// h: Half-carry flag bit, 1 or 0
+// c: Carry flag bit, 1 or 0
+#define SET_FLAGS(f_ptr, z, n, h, c) \
+	*(f_ptr) = ((z) << FBIT_Z) | ((n) << FBIT_N) | ((h) << FBIT_H) | ((c) << FBIT_C)
+
+// Get flag bit.
+// f_ptr: Pointer to flag value.
+// fbit: Bit offset of flag to read.
+//
+// returns 1 if flag is set, 0 if flag is cleared
+#define GET_FLAG(f_ptr, fbit) ((*(f_ptr) >> (fbit)) & 0x1)
+
+//=======================================================================
 // def ADV()
 //
 // Advances the CPU cycle counter and instruction pointer by the
@@ -177,12 +202,16 @@
 // * ret: The return value at the end of each case statement.
 //=======================================================================
 
-// A macro which writes `val` to the register `reg`.
-// This is intended for use specifically with case sets, so they be
-// instructed on how to set the register, versus setting memory.
-// If you intend to write to registers outside of case sets, use the
-// standard register access (R/W) macros defined above.
-#define WREG8(reg, val) ((reg) = (val))
+// The following macros define how to write an instruction's
+// resulting value after its has been computed.
+// Each accepts 2 arguments:
+// 1: Defines the destination.
+// 2: Defines the value.
+//
+// These are intended to be used as `set` arguments for CASESET macros.
+#define WREG8(reg, val) ((reg) = (val)) // To 8-bit register.
+#define WMEM8(addr, val) twi_gb_mem_write8(MEM_PTR, addr, val) // To byte in memory.
+#define WIGN(na, val) (val) // Perform computation, but do not write.
 
 // Defines the return conditions of any operation which modifies memory
 // via a pointer stored in HL.
@@ -195,83 +224,70 @@
 #define CASE(offset, op, set, lhs, rhs, cyc, ib, ret) \
 	case offset: set(lhs, op(&REG_F, lhs, rhs)); ADV(cyc, ib); return (ret)
 
-// Defines 7 switch cases, in which the right-hand side arguments
-// appear in the following order:
-// REG_B, REG_C, REG_D, REG_E, REG_H, REG_L, REG_A
+// Defines 7 switch cases for instructions which accept 2 8-bit operands.
 //
-// offset + (stride * 6) is skipped when enumerating cases,
-// due to the opcodes used by instructions which follow this pattern.
-#define CASESET_7R(offset, stride, op, set, lhs, cyc, ret) \
+// The left-hand side argument for each instruction is the value of `lhs`.
+//
+// The right-hand side argument for each instruction is the value of 
+// one of the following 8-bit registers, used in the listed order:
+// B, C, D, E, H, L, A
+//
+// (offset + stride * 6) is skipped when enumerating cases,
+// so as to match the pattern used by actual instructions which is
+// caseset seeks to imitate.
+#define CASESET28_7R(offset, stride, op, set, lhs, cyc, ret) \
 	CASE(offset               , op, set, lhs, REG_B, cyc, 1, ret); \
 	CASE(offset + stride      , op, set, lhs, REG_C, cyc, 1, ret); \
-	CASE(offset + (stride * 2), op, set, lhs, REG_D, cyc, 1, ret); \
-	CASE(offset + (stride * 3), op, set, lhs, REG_E, cyc, 1, ret); \
-	CASE(offset + (stride * 4), op, set, lhs, REG_H, cyc, 1, ret); \
-	CASE(offset + (stride * 5), op, set, lhs, REG_L, cyc, 1, ret); \
-	CASE(offset + (stride * 7), op, set, lhs, REG_A, cyc, 1, ret)
+	CASE(offset + stride * 2, op, set, lhs, REG_D, cyc, 1, ret); \
+	CASE(offset + stride * 3, op, set, lhs, REG_E, cyc, 1, ret); \
+	CASE(offset + stride * 4, op, set, lhs, REG_H, cyc, 1, ret); \
+	CASE(offset + stride * 5, op, set, lhs, REG_L, cyc, 1, ret); \
+	CASE(offset + stride * 7, op, set, lhs, REG_A, cyc, 1, ret)
 
-// Same as CASESET_7R(), but handles an additional opcode at `n_offset`,
-// for when the RHS value originates from an unsigned 8-bit immediate.
-#define CASESET_7RN(offset, stride, n_offset, op, set, lhs, cyc, n_cyc, ret) \
-	CASESET_7R(offset, stride, op, set, lhs, cyc, ret); \
+// Same as CASESET28_7R(), and handles an additional opcode at `n_offset`,
+// for when the rhs value originates from an unsigned 8-bit immediate.
+#define CASESET28_7RN(offset, stride, n_offset, op, set, lhs, cyc, n_cyc, ret) \
+	CASESET28_7R(offset, stride, op, set, lhs, cyc, ret); \
 	CASE(n_offset, op, set, lhs, IMMED8, n_cyc, 2, ret)
 
-// Same as CASESET_7R(), but handles an additional opcode at offset + (stride * 6)
-// when the RHS value originates from memory pointed to by the value of REG_HL.
-#define CASESET_7RHLM(offset, stride, op, set, lhs, cyc, HLM_cyc, ret) \
-	CASESET_7R(offset, stride, op, set, lhs, cyc, ret); \
-	CASE(offset + (stride * 6), op, set, lhs, RMEM8(REG_HL), HLM_cyc, 1, (ret))
-
-// Same as CASESET_7RHLMN(), but handles an additional opcode at n_offset,
-// for when the RHS value originates from an unsigned 8-bit immediate.
-#define CASESET_7RHLMN(offset, stride, n_offset, op, set, lhs, cyc, HLM_cyc, n_cyc, ret) \
-	CASESET_7RHLM(offset, stride, op, set, lhs, cyc, HLM_cyc, ret); \
-	CASE(n_offset, op, set, lhs, IMMED8, n_cyc, 2, ret)
-
-// Shortcut macro for the implementation of CASESET_8B, defined below.
-// * b: The number of strides after offset of the case's integral trigger.
-//   as well as the bit offset used as the second argument of op().
-#define CASE_8B(b) \
-	case offset + (stride * (b)): set(lhs, op(lhs, b)); ADV(cyc, 2); return (ret)
-
-// Defines 8 switch cases, in which the right hand arguments are bit
-// offset of the `lhs` argument, from lowest-to-highest order:
-// 0, 1, 2, 3, 4, 5, 6, 7
+// Same as CASESET28_7RN, and handles an additional opcode at (offset + stride * 6)
+// when the rhs value originates from memory pointed to by the value of REG_HL.
 //
-// Note that the `set` argument is not present in this macro.
-// As such, the `op` argument will be responsible for assignment of the result.
-#define CASESET_8B(offset, stride, op, lhs, cyc, ret) \
-	CASE_8B(0); \
-	CASE_8B(1); \
-	CASE_8B(2); \
-	CASE_8B(3); \
-	CASE_8B(4); \
-	CASE_8B(5); \
-	CASE_8B(6); \
-	CASE_8B(7)
+// This version of the CASESET28 macro does not accept cycle arguments
+// or a return expression, as the pattern of instruction which this
+// macro applies to all share identical values for these arguments.
+// Cycles when the right-hand side argument is a...
+// 8-bit register: 4
+// 16-bit pointer in REG_HL: 8
+// Unsigned 8-bit immediate: 8
+#define CASESET28_7RHLPN(offset, stride, n_offset, op, set, lhs) \
+	CASESET28_7RN(offset, stride, n_offset, op, set, lhs, 4, 8, 0); \
+	CASE(offset + stride * 6, op, set, lhs, RMEM8(REG_HL), 8, 1, HLM_RETURN)
 
-// Defines cases for all 64 permutations of an operation with
-// Either one of the 7 8-bit registers (not F) or HL as the LHS argument,
-// and a bit offset of 0-7 as the RHS argument.
+// Defines 8 switch cases for instructions which accept 1 8-bit operand.
+// 
+// The singular operand for each instruction is the value of one of the
+// following, used in the listed order:
+// B, C, D, E, H, L, (HL), A
 //
-// Note the following:
-// * No `stride` argument is taken as the stride for all operations with
-//   this opcode pattern is the same.
-// * As operations with bit offset arguments may perform both a read and
-//   a write on the LHS argument, an alternate op function is required when
-//   interacting with the memory pointed to by HL (defined by `HLM_op`).
-// * No return for non-HLM operations is accepted, as non-HLM operations
-//   never modify memory, and therefore never prompt re-evaluation of
-//   active interrupts. All non-HLM operations return 0.
-#define CASESET_7RHLM_8B(offset, op, HLM_op, cyc, HLM_cyc, HLM_ret) \
-	CASESET_8B(offset      , 0x8, op, REG_B, cyc, 0); \
-	CASESET_8B(offset + 0x1, 0x8, op, REG_C, cyc, 0); \
-	CASESET_8B(offset + 0x2, 0x8, op, REG_D, cyc, 0); \
-	CASESET_8B(offset + 0x3, 0x8, op, REG_E, cyc, 0); \
-	CASESET_8B(offset + 0x4, 0x8, op, REG_H, cyc, 0); \
-	CASESET_8B(offset + 0x5, 0x8, op, REG_L, cyc, 0); \
-	CASESET_8B(offset + 0x6, 0x8, HLM_op, REG_HL, HLM_cyc, HLM_ret); \
-	CASESET_8B(offset + 0x7, 0x8, op, REG_A, cyc, 0)
+// Operations (passed as `op`) should accept 3 arguments (f, lhs, unused),
+// as if the operation accepts 2 operands. This is so that all operation
+// functions share the same signature, which makes the CPU easier to test.
+// The value passed as the 3rd argument is arbitrary and should be ignored.
+//
+// `cyc` defines the number of cycles consumed
+// when the operand is an 8-bit register.
+// When the operand is a pointer to memory,
+// the number of cycles consumed is (`cyc` + 8).
+#define CASESET18_7RHLP(offset, stride, op, cyc, ib) \
+	case offset             : REG_B = op(&REG_F, REG_B, 0); ADV(cyc, ib); return 0; \
+	case offset + stride    : REG_C = op(&REG_F, REG_C, 0); ADV(cyc, ib); return 0; \
+	case offset + stride * 2: REG_D = op(&REG_F, REG_D, 0); ADV(cyc, ib); return 0; \
+	case offset + stride * 3: REG_E = op(&REG_F, REG_E, 0); ADV(cyc, ib); return 0; \
+	case offset + stride * 4: REG_H = op(&REG_F, REG_H, 0); ADV(cyc, ib); return 0; \
+	case offset + stride * 5: REG_L = op(&REG_F, REG_L, 0); ADV(cyc, ib); return 0; \
+	case offset + stride * 6: WMEM8(REG_HL, op(&REG_F, RMEM8(REG_HL), 0)); ADV((cyc) + 8, ib); return HLM_RETURN; \
+	case offset + stride * 7: REG_A = op(&REG_F, REG_A, 0); ADV(cyc, ib); return 0
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -358,11 +374,109 @@ void twi_gb_cpu_diffdump(
 // * lhs: The left-hand side 8-bit or 16-bit value.
 // * rhs: The right-hand side 8-bit or 16-bit value.
 //=======================================================================
+// LD: Overwrite lhs value with rhs value. No flag changes.
 static inline uint8_t LD8(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) { return rhs; }
 static inline uint16_t LD16(uint8_t* restrict f, uint16_t lhs, uint16_t rhs) { return rhs; }
-static inline uint8_t ADD8(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) { return lhs + rhs; }
-static inline uint16_t ADD16(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) { return lhs + rhs; }
-static inline uint8_t SUB(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) { return lhs - rhs; }
+
+// ADD: Add rhs value to lhs value.
+// ADC: Add rhs value and carry bit to lhs value.
+//
+// Z: 
+// * 8-bit: Set if sum == 0, else reset.
+// * 16-bit: No change.
+// N: Reset.
+// H:
+// * 8-bit: Set if carrying from bit 3, else reset.
+// * 16-bit: Set if carrying from bit 11, else reset.
+// C: Set if overflow occurs, else reset.
+static inline uint8_t ADD8(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+	uint16_t sum = lhs + rhs;
+	SET_FLAGS(f, sum == 0, 0, ((lhs & 0xF) + (rhs & 0xF)) > 0xF, sum > 0xFF);
+	return (uint8_t)sum;
+} // end ADD8()
+static inline uint16_t ADD16(uint8_t* restrict f, uint16_t lhs, uint16_t rhs) {
+	uint32_t sum = lhs + rhs;
+	SET_FLAGS(f, GET_FLAG(f, FBIT_Z), 0, ((lhs & 0xFFF) + (rhs & 0xFFF)) > 0xFFF, sum > 0xFFFF);
+	return (uint16_t)sum;
+} // end ADD16()
+static inline uint8_t ADC(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+	uint_fast8_t c = GET_FLAG(f, FBIT_C);
+	uint16_t sum = lhs + rhs + c;
+	SET_FLAGS(f, sum == 0, 0, ((lhs & 0xF) + (rhs & 0xF) + c) > 0xF, sum > 0xFF);
+	return (uint8_t)sum;
+} // end ADC()
+
+// SUB: Subtract rhs value from lhs value.
+// SBC: Subtract rhs value and carry bit from lhs value.
+// (Note: CP is identical to SUB with its return value discarded).
+//
+// Z: Set if difference == 0, else reset.
+// N: Set.
+// H: Set if borrowing from bit 4, else reset.
+// C: Set if overflow occurs, else reset.
+static inline uint8_t SUB(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+	uint16_t diff = lhs - rhs;
+	SET_FLAGS(f, diff == 0, 1, ((lhs & 0xF) - (rhs - 0xF)) > 0xF, diff > 0xFF);
+	return (uint8_t)diff;
+} // end SUB()
+static inline uint8_t SBC(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+	uint_fast8_t c = GET_FLAG(f, FBIT_C);
+	uint16_t diff = lhs - rhs - c;
+	SET_FLAGS(f, diff == 0, 1, ((lhs & 0xF) - (rhs & 0xF) - c) > 0xF, diff > 0xFF);
+	return (uint8_t)diff;
+} // end SBC()
+
+// AND: Logical AND of lhs and rhs values.
+// OR: Logical OR of lhs and rhs values.
+// XOR: Logical XOR of lhs and rhs values.
+//
+// Z: Set if result == 0, else reset.
+// N: Reset.
+// H: Set for AND, else reset.
+// C: Reset.
+static inline uint8_t AND(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+	uint8_t result = lhs & rhs;
+	SET_FLAGS(f, result == 0, 0, 1, 0);
+	return result;
+} // end AND()
+static inline uint8_t OR(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+	uint8_t result = lhs | rhs;
+	SET_FLAGS(f, result == 0, 0, 0, 0);
+	return result;
+} // end OR()
+static inline uint8_t XOR(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+	uint8_t result = lhs ^ rhs;
+	SET_FLAGS(f, result == 0, 0, 0, 0);
+	return result;
+} // end XOR()
+
+// INC: Increment lhs value by 1.
+// DEC: Decrement lhs value by 1.
+//
+// NOTE: 16-bit versions make no flag changes.
+// 8-bit flag changes:
+// Z: Set if result == 0, else reset.
+// N: Set if DEC, reset if INC.
+// H:
+// * INC: Set if carry from bit 3, else reset.
+// * DEC: Set if borrow from bit 4, else reset.
+// C: No change.
+static inline uint8_t INC8(uint8_t* restrict f, uint8_t lhs, uint8_t) {
+	uint8_t sum = lhs + 1;
+	SET_FLAGS(f, sum == 0, 0, (lhs & 0xF) == 0xF, GET_FLAG(f, FBIT_C));
+	return sum;
+} // end INC8()
+static inline uint16_t INC16(uint8_t* restrict f, uint16_t lhs, uint16_t) {
+	return lhs + 1;
+} // end INC16()
+static inline uint8_t DEC8(uint8_t* restrict f, uint8_t lhs, uint8_t) {
+	uint8_t diff = lhs - 1;
+	SET_FLAGS(f, diff == 0, 1, (lhs & 0xF) == 0, GET_FLAG(f, FBIT_C));
+	return diff;
+} // end DEC8()
+static inline uint16_t DEC16(uint8_t* restrict f, uint16_t lhs, uint16_t) {
+	return lhs - 1;
+} // end DEC16()
 
 //=======================================================================
 // def interpret_once()
@@ -377,15 +491,25 @@ interpret_once(
 	twi_assert_notnull(mem);
 
 	switch (twi_gb_mem_read8(mem, cpu->pc)) {
-		CASESET_7RHLMN(0x40, 0x1, 0x06, LD8, WREG8, REG_B, 4, 8, 8, 0); // LD B, r|(HL)|n
-		CASESET_7RHLMN(0x48, 0x1, 0x0E, LD8, WREG8, REG_C, 4, 8, 8, 0); // LD C, r|(HL)|n
-		CASESET_7RHLMN(0x50, 0x1, 0x16, LD8, WREG8, REG_D, 4, 8, 8, 0); // LD D, r|(HL)|n
-		CASESET_7RHLMN(0x58, 0x1, 0x1E, LD8, WREG8, REG_E, 4, 8, 8, 0); // LD E, r|(HL)|n
-		CASESET_7RHLMN(0x60, 0x1, 0x26, LD8, WREG8, REG_H, 4, 8, 8, 0); // LD H, r|(HL)|n
-		CASESET_7RHLMN(0x68, 0x1, 0x2E, LD8, WREG8, REG_L, 4, 8, 8, 0); // LD L, r|(HL)|n
-		CASESET_7RN(0x70, 0x1, 0x36, LD8, WMEM8, REG_HL, 8, 12, HLM_RETURN); // LD (HL), r|n
-		CASESET_7RHLMN(0x78, 0x1, 0x3E, LD8, WREG8, REG_A, 4, 8, 8, 0); // LD A, r|(HL)|n
-	} // end operation lookup
+		CASESET18_7RHLP(0x04, 8, INC8, 4, 1); // INC r|(HL)
+		CASESET18_7RHLP(0x05, 8, DEC8, 4, 1); // DEC r|(HL)
+		CASESET28_7RHLPN(0x40, 1, 0x06, LD8, WREG8, REG_B); // LD B, r|(HL)|n
+		CASESET28_7RHLPN(0x48, 1, 0x0E, LD8, WREG8, REG_C); // LD C, r|(HL)|n
+		CASESET28_7RHLPN(0x50, 1, 0x16, LD8, WREG8, REG_D); // LD D, r|(HL)|n
+		CASESET28_7RHLPN(0x58, 1, 0x1E, LD8, WREG8, REG_E); // LD E, r|(HL)|n
+		CASESET28_7RHLPN(0x60, 1, 0x26, LD8, WREG8, REG_H); // LD H, r|(HL)|n
+		CASESET28_7RHLPN(0x68, 1, 0x2E, LD8, WREG8, REG_L); // LD L, r|(HL)|n
+		CASESET28_7RN(0x70, 1, 0x36, LD8, WMEM8, REG_HL, 8, 12, HLM_RETURN); // LD (HL), r|n
+		CASESET28_7RHLPN(0x78, 1, 0x3E, LD8, WREG8, REG_A); // LD A, r|(HL)|n
+		CASESET28_7RHLPN(0x80, 1, 0xC6, ADD8, WREG8, REG_A); // ADD A, r|(HL)|n
+		CASESET28_7RHLPN(0x88, 1, 0xCE, ADC, WREG8, REG_A); // ADC A, r|(HL)|n
+		CASESET28_7RHLPN(0x90, 1, 0xD6, SUB, WREG8, REG_A); // SUB A, r|(HL)|n
+		CASESET28_7RHLPN(0x98, 1, 0xDE, SBC, WREG8, REG_A); // SBC A, r|(HL)|n
+		CASESET28_7RHLPN(0xA0, 1, 0xE6, AND, WREG8, REG_A); // AND A, r|(HL)|n
+		CASESET28_7RHLPN(0xA8, 1, 0xEE, XOR, WREG8, REG_A); // XOR A, r|(HL)|n
+		CASESET28_7RHLPN(0xB0, 1, 0xF6, OR, WREG8, REG_A); // OR A, r|(HL)|n
+		CASESET28_7RHLPN(0xB8, 1, 0xFE, SUB, WIGN, REG_A); // CP A, r|(HL)|n
+	} // end operation lookup and execution
 }; // end interpret_once()
 
 //=======================================================================
