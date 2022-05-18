@@ -82,6 +82,11 @@ static uint_fast8_t testcpu8(
 		enum testcpu_type8, uint_fast8_t, const uint8_t[]
 );
 static uint_fast8_t
+testcpu_arith18(
+		const char*, uint8_t,
+		uint8_t (*)(uint8_t* restrict, uint8_t, uint8_t)
+);
+static uint_fast8_t
 testcpu_arith28(
 		const char*, uint8_t,
 		uint8_t (*)(uint8_t* restrict, uint8_t, uint8_t),
@@ -246,6 +251,8 @@ test_fail:
 size_t
 testcpu_arithmetic_integration() {
 	size_t fail_count;
+	fail_count += testcpu_arith18("INC", 0x04, INC8);
+	fail_count += testcpu_arith18("DEC", 0x05, DEC8);
 	fail_count += testcpu_arith28("ADD", 0x80, ADD8, 1);
 	fail_count += testcpu_arith28("ADC", 0x88, ADC, 1);
 	fail_count += testcpu_arith28("SUB", 0x90, SUB, 1);
@@ -506,6 +513,62 @@ test_fail: // Jumped to by twi_test().
 } // end testcpu8()
 
 //=======================================================================
+// def twicpu_arith18
+//
+// Runs tests for an 8-bit arithmetic instruction which accepts 1 operand.
+//
+// The operand will be one of: B, C, D, E, H, L, (HL), A.
+//-----------------------------------------------------------------------
+// Parameters:
+// * op_name: The name of the instruction being tested.
+//   Behavior is undefined if `op_name` does not point to a
+//   NULL-terminated character array.
+// * B_opcode: The opcode for the instruction of this operation which
+//   uses the 8-bit register B as its rhs argument.
+// * op: The operation function.
+//   Behavior is undefined if `op` does not point to a function of the
+//   specified signature.
+//   * First argument should accept a pointer to a flag register.
+//   * Second argument should accept the left-hand side value.
+//   * Third argument should accept the right-hand side value.
+//   * Should return the result of the operation.
+//=======================================================================
+static uint_fast8_t
+testcpu_arith18(
+		const char* op_name,
+		uint8_t B_opcode,
+		uint8_t (*op)(uint8_t* restrict, uint8_t, uint8_t)
+) {
+	static const uint_fast8_t LONGEST_POSTFIX_LEN = 5;
+	static const uint_fast8_t STRIDE = 8; // Bytes between opcodes.
+
+	size_t op_name_len = strlen(op_name);
+	uint8_t name[op_name_len + LONGEST_POSTFIX_LEN + 1];
+	strcpy(name, op_name);
+	// rhs: B, C, D, E, H, L, A
+	strcat(name, " r");
+	uint8_t prog[] = {
+		B_opcode, B_opcode + STRIDE, B_opcode + STRIDE*2, B_opcode + STRIDE*3,
+		B_opcode + STRIDE*4, B_opcode + STRIDE*5, B_opcode + STRIDE*7
+	};
+	uint_fast8_t fail_count = testcpu8(name, sizeof(prog), prog, op, 1, 4, 1,
+			TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set,
+			TESTCPU_TYPE_NONE, 0, NULL
+	);
+
+	// rhs: (HL)
+	name[op_name_len] = 0; // Truncate postfix.
+	strcat(name, " (HL)");
+	prog[0] = B_opcode + STRIDE*6;
+	fail_count += testcpu8(name, 1, prog, op, 1, 12, 1,
+			TESTCPU_TYPE_REG16PTR, sizeof(HL_set), HL_set,
+			TESTCPU_TYPE_NONE, 0, NULL
+	);
+
+	return fail_count;
+} // end testcpu_arith18()
+
+//=======================================================================
 // def testcpu_arith28
 //
 // Runs tests for an 8-bit arithmetic instruction which accepts 2 operands.
@@ -551,7 +614,7 @@ testcpu_arith28(
 		B_opcode, B_opcode+1, B_opcode+2, B_opcode+3,
 		B_opcode+4, B_opcode+5, B_opcode+7
 	};
-	int_fast8_t fail_count = testcpu8(name, sizeof(prog), prog, op, 1, 4, writeback,
+	uint_fast8_t fail_count = testcpu8(name, sizeof(prog), prog, op, 1, 4, writeback,
 			TESTCPU_TYPE_REG8, sizeof(A_set), A_set,
 			TESTCPU_TYPE_REG8, sizeof(reg8_set), reg8_set
 	);
