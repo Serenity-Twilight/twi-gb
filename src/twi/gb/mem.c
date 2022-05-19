@@ -140,6 +140,24 @@ twi_gb_mem_read8(
 } // end twi_gb_mem_read8()
 
 //=======================================================================
+// def twi_gb_mem_read16()
+//=======================================================================
+uint16_t
+twi_gb_mem_read16(
+		const struct twi_gb_mem* restrict mem,
+		uint16_t addr
+) {
+	twi_assert_notnull(mem);
+	// Memory map is in little endian format.
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	return *((uint16_t*)(mem->map + addr));
+#else
+	// Endian-independent value assembly.
+	return (mem->map[addr] | (((uint16_t)(mem->map[addr+1])) << 8));
+#endif // __BYTE_ORDER__
+} // end twi_gb_mem_read16()
+
+//=======================================================================
 // def twi_gb_mem_write8()
 //=======================================================================
 void
@@ -185,6 +203,30 @@ twi_gb_mem_write8(
 			break; // TODO: MBC
 	}
 } // end twi_gb_mem_write8()
+
+//=======================================================================
+// def twi_gb_mem_write16()
+//=======================================================================
+void
+twi_gb_mem_write16(
+		struct twi_gb_mem* restrict mem,
+		uint16_t addr,
+		uint16_t val
+) {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	// Byte order matches memory map byte order.
+	twi_gb_mem_write8(mem, addr, *((uint8_t*)(&val)));
+	twi_gb_mem_write8(mem, addr+1, *(((uint8_t*)(&val)) + 1));
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+	// Reverse byte order.
+	twi_gb_mem_write8(mem, addr, *(((uint8_t*)(&val)) + 1));
+	twi_gb_mem_write8(mem, addr+1, *((uint8_t*)(&val)));
+#else
+	// Use endian-independent value decomposition.
+	twi_gb_mem_write8(mem, addr, (uint8_t)(val & 0xFF));
+	twi_gb_mem_write8(mem, addr+1, (uint8_t)((val & 0xFF00) >> 8));
+#endif // end __BYTE_ORDER__
+} // end twi_gb_mem_write16()
 
 //=======================================================================
 // def twi_gb_mem_read_sector()

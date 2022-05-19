@@ -122,8 +122,25 @@ twi_gb_mem_init(
 uint8_t
 twi_gb_mem_read8(const struct twi_gb_mem* restrict mem, uint16_t addr);
 
+//=======================================================================
+// decl twi_gb_mem_read16()
+// TODO
+//=======================================================================
+uint16_t
+twi_gb_mem_read16(const struct twi_gb_mem* restrict mem, uint16_t addr);
+
+//=======================================================================
+// decl twi_gb_mem_write8()
+// TODO
+//=======================================================================
 void
 twi_gb_mem_write8(struct twi_gb_mem* restrict mem, uint16_t addr, uint8_t val);
+
+//=======================================================================
+// decl twi_gb_mem_write16()
+// TODO
+//=======================================================================
+void twi_gb_mem_write16(struct twi_gb_mem* restrict mem, uint16_t addr, uint16_t val);
 
 //=======================================================================
 // decl twi_gb_mem_read_sector()

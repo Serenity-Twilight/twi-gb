@@ -59,13 +59,7 @@
 // Read unsigned 8-bit immediate
 #define IMMED8 (RMEM8((CPU_PTR)->pc + 1))
 // Read unsigned 16-bit immediate
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-	// Program memory is in little endian format.
-	// Construct the value manually, independent of endianness.
-#	define IMMED16 (RMEM8((CPU_PTR)->pc + 1) | (((uint16_t)(RMEM((CPU_PTR)->pc + 1))) << 8))
-#else // Little endian (and hopefully not mixed endian)
-#	define IMMED16 (*((uint16_t*)(PROG_PTR + (CPU_PTR)->pc + 1))) // TODO
-#endif // __BYTE_ORDER__
+#define IMMED16 (twi_gb_mem_read16(MEM_PTR, (CPU_PTR)->pc + 1))
 // Read signed 8-bit immediate
 #define IMMEDs8 (*((int8_t*)(PROG_PTR + (CPU_PTR)->pc + 1))) // TODO
 
@@ -159,12 +153,12 @@
 // specified values.
 //-----------------------------------------------------------------------
 // Parameters:
-// * cyc: The number of cycles to advance the CPU clock by.
 // * ib: The number of bytes to advance the instruction pointer by.
+// * cyc: The number of cycles to advance the CPU clock by.
 //=======================================================================
-#define ADV(cyc, ib) { \
-	(CPU_PTR)->div += cyc; \
+#define ADV(ib, cyc) { \
 	(CPU_PTR)->pc += ib; \
+	(CPU_PTR)->div += cyc; \
 }
 
 //=======================================================================
@@ -209,9 +203,17 @@
 // 2: Defines the value.
 //
 // These are intended to be used as `set` arguments for CASESET macros.
-#define WREG8(reg, val) ((reg) = (val)) // To 8-bit register.
+#define WREG(reg, val) ((reg) = (val)) // To register.
 #define WMEM8(addr, val) twi_gb_mem_write8(MEM_PTR, addr, val) // To byte in memory.
 #define WIGN(na, val) (val) // Perform computation, but do not write.
+// Write rr to (SP), increment SP by 2.
+#define WPUSH(rr, ...) \
+	twi_gb_mem_write16(MEM_PTR, REG_SP, rr); \
+	REG_SP += 2;
+// Decrement SP by 2. Write (SP) to rr.
+#define WPOP(rr, ...) \
+	REG_SP -= 2; \
+	rr = twi_gb_mem_read16(MEM_PTR, REG_SP);
 
 // Defines the return conditions of any operation which modifies memory
 // via a pointer stored in HL.
@@ -221,8 +223,8 @@
 #define HLM_RETURN ((REG_HL == 0xFFFF) ? -1 : 0)
 
 // The base case from which all casesets are constructed.
-#define CASE(offset, op, set, lhs, rhs, cyc, ib, ret) \
-	case offset: set(lhs, op(&REG_F, lhs, rhs)); ADV(cyc, ib); return (ret)
+#define CASE(offset, op, set, lhs, rhs, ib, cyc, ret) \
+	case offset: set(lhs, op(&REG_F, lhs, rhs)); ADV(ib, cyc); return (ret)
 
 // Defines 7 switch cases for instructions which accept 2 8-bit operands.
 //
@@ -236,19 +238,19 @@
 // so as to match the pattern used by actual instructions which is
 // caseset seeks to imitate.
 #define CASESET28_7R(offset, stride, op, set, lhs, cyc, ret) \
-	CASE(offset               , op, set, lhs, REG_B, cyc, 1, ret); \
-	CASE(offset + stride      , op, set, lhs, REG_C, cyc, 1, ret); \
-	CASE(offset + stride * 2, op, set, lhs, REG_D, cyc, 1, ret); \
-	CASE(offset + stride * 3, op, set, lhs, REG_E, cyc, 1, ret); \
-	CASE(offset + stride * 4, op, set, lhs, REG_H, cyc, 1, ret); \
-	CASE(offset + stride * 5, op, set, lhs, REG_L, cyc, 1, ret); \
-	CASE(offset + stride * 7, op, set, lhs, REG_A, cyc, 1, ret)
+	CASE(offset               , op, set, lhs, REG_B, 1, cyc, ret); \
+	CASE(offset + stride      , op, set, lhs, REG_C, 1, cyc, ret); \
+	CASE(offset + stride * 2, op, set, lhs, REG_D, 1, cyc, ret); \
+	CASE(offset + stride * 3, op, set, lhs, REG_E, 1, cyc, ret); \
+	CASE(offset + stride * 4, op, set, lhs, REG_H, 1, cyc, ret); \
+	CASE(offset + stride * 5, op, set, lhs, REG_L, 1, cyc, ret); \
+	CASE(offset + stride * 7, op, set, lhs, REG_A, 1, cyc, ret)
 
 // Same as CASESET28_7R(), and handles an additional opcode at `n_offset`,
 // for when the rhs value originates from an unsigned 8-bit immediate.
 #define CASESET28_7RN(offset, stride, n_offset, op, set, lhs, cyc, n_cyc, ret) \
 	CASESET28_7R(offset, stride, op, set, lhs, cyc, ret); \
-	CASE(n_offset, op, set, lhs, IMMED8, n_cyc, 2, ret)
+	CASE(n_offset, op, set, lhs, IMMED8, 2, n_cyc, ret)
 
 // Same as CASESET28_7RN, and handles an additional opcode at (offset + stride * 6)
 // when the rhs value originates from memory pointed to by the value of REG_HL.
@@ -262,7 +264,7 @@
 // Unsigned 8-bit immediate: 8
 #define CASESET28_7RHLPN(offset, stride, n_offset, op, set, lhs) \
 	CASESET28_7RN(offset, stride, n_offset, op, set, lhs, 4, 8, 0); \
-	CASE(offset + stride * 6, op, set, lhs, RMEM8(REG_HL), 8, 1, HLM_RETURN)
+	CASE(offset + stride * 6, op, set, lhs, RMEM8(REG_HL), 1, 8, HLM_RETURN)
 
 // Defines 8 switch cases for instructions which accept 1 8-bit operand.
 // 
@@ -279,15 +281,43 @@
 // when the operand is an 8-bit register.
 // When the operand is a pointer to memory,
 // the number of cycles consumed is (`cyc` + 8).
-#define CASESET18_7RHLP(offset, stride, op, cyc, ib) \
-	case offset             : REG_B = op(&REG_F, REG_B, 0); ADV(cyc, ib); return 0; \
-	case offset + stride    : REG_C = op(&REG_F, REG_C, 0); ADV(cyc, ib); return 0; \
-	case offset + stride * 2: REG_D = op(&REG_F, REG_D, 0); ADV(cyc, ib); return 0; \
-	case offset + stride * 3: REG_E = op(&REG_F, REG_E, 0); ADV(cyc, ib); return 0; \
-	case offset + stride * 4: REG_H = op(&REG_F, REG_H, 0); ADV(cyc, ib); return 0; \
-	case offset + stride * 5: REG_L = op(&REG_F, REG_L, 0); ADV(cyc, ib); return 0; \
-	case offset + stride * 6: WMEM8(REG_HL, op(&REG_F, RMEM8(REG_HL), 0)); ADV((cyc) + 8, ib); return HLM_RETURN; \
-	case offset + stride * 7: REG_A = op(&REG_F, REG_A, 0); ADV(cyc, ib); return 0
+#define CASESET18_7RHLP(offset, stride, op, ib, cyc) \
+	case offset             : REG_B = op(&REG_F, REG_B, 0); ADV(ib, cyc); return 0; \
+	case offset + stride    : REG_C = op(&REG_F, REG_C, 0); ADV(ib, cyc); return 0; \
+	case offset + stride * 2: REG_D = op(&REG_F, REG_D, 0); ADV(ib, cyc); return 0; \
+	case offset + stride * 3: REG_E = op(&REG_F, REG_E, 0); ADV(ib, cyc); return 0; \
+	case offset + stride * 4: REG_H = op(&REG_F, REG_H, 0); ADV(ib, cyc); return 0; \
+	case offset + stride * 5: REG_L = op(&REG_F, REG_L, 0); ADV(ib, cyc); return 0; \
+	case offset + stride * 6: WMEM8(REG_HL, op(&REG_F, RMEM8(REG_HL), 0)); ADV(ib, (cyc) + 8); return HLM_RETURN; \
+	case offset + stride * 7: REG_A = op(&REG_F, REG_A, 0); ADV(ib, cyc); return 0
+
+// Defines 4 switch cases with user provided operands.
+// Supports operations with both 1 and 2 operands.
+// Intended for usage with 16-bit instructions.
+//
+// Due to the inconsistency of instructions "following" this pattern,
+// all lhs and rhs arguments are provided by the user.
+// Operands are paired with the operand with the like-index.
+// Example:
+// op(lhs1, rhs1)
+// op(lhs2, rhs2)
+// and so on.
+// 
+// No stride argument is accepted as instructions following this
+// caseset pattern all share the same stride.
+#define CASESET16_4(offset, op, set, lhs1, lhs2, lhs3, lhs4, rhs1, rhs2, rhs3, rhs4, ib, cyc, ret) \
+	case offset       : set(lhs1, op(&REG_F, lhs1, rhs1)); ADV(ib, cyc); return (ret); \
+	case offset + 0x10: set(lhs2, op(&REG_F, lhs2, rhs2)); ADV(ib, cyc); return (ret); \
+	case offset + 0x20: set(lhs3, op(&REG_F, lhs3, rhs3)); ADV(ib, cyc); return (ret); \
+	case offset + 0x30: set(lhs4, op(&REG_F, lhs4, rhs4)); ADV(ib, cyc); return (ret)
+
+// A version of CASESET16_4 with the following restrictions:
+// * lhs follows the pattern of BC, DE, HL, and a fourth register specified
+//   by the user via `case4_lhs`, in that order.
+// * A single rhs value, provided by the user, is used by all four cases.
+// * As the targets are 16-bit registers, no return expression is accepted.
+#define CASESET16_4RR(offset, op, set, lhs4, rhs, ib, cyc) \
+	CASESET16_4(offset, op, set, REG_BC, REG_DE, REG_HL, lhs4, rhs, rhs, rhs, rhs, ib, cyc, 0)
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -374,6 +404,9 @@ void twi_gb_cpu_diffdump(
 // * lhs: The left-hand side 8-bit or 16-bit value.
 // * rhs: The right-hand side 8-bit or 16-bit value.
 //=======================================================================
+// NOP: Consume arguments and do nothing.
+#define NOP(...) ((void)0)
+
 // LD: Overwrite lhs value with rhs value. No flag changes.
 static inline uint8_t LD8(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) { return rhs; }
 static inline uint16_t LD16(uint8_t* restrict f, uint16_t lhs, uint16_t rhs) { return rhs; }
@@ -491,24 +524,30 @@ interpret_once(
 	twi_assert_notnull(mem);
 
 	switch (twi_gb_mem_read8(mem, cpu->pc)) {
-		CASESET18_7RHLP(0x04, 8, INC8, 4, 1); // INC r|(HL)
-		CASESET18_7RHLP(0x05, 8, DEC8, 4, 1); // DEC r|(HL)
-		CASESET28_7RHLPN(0x40, 1, 0x06, LD8, WREG8, REG_B); // LD B, r|(HL)|n
-		CASESET28_7RHLPN(0x48, 1, 0x0E, LD8, WREG8, REG_C); // LD C, r|(HL)|n
-		CASESET28_7RHLPN(0x50, 1, 0x16, LD8, WREG8, REG_D); // LD D, r|(HL)|n
-		CASESET28_7RHLPN(0x58, 1, 0x1E, LD8, WREG8, REG_E); // LD E, r|(HL)|n
-		CASESET28_7RHLPN(0x60, 1, 0x26, LD8, WREG8, REG_H); // LD H, r|(HL)|n
-		CASESET28_7RHLPN(0x68, 1, 0x2E, LD8, WREG8, REG_L); // LD L, r|(HL)|n
+		case 0x00: ADV(1, 4); return 0; // NOP
+		CASESET16_4RR(0x01, LD16, WREG, REG_SP, IMMED16, 3, 12); // LD rr, nn
+		CASESET16_4RR(0x03, INC16, WREG, REG_SP, 0, 1, 8); // INC rr
+		CASESET18_7RHLP(0x04, 8, INC8, 1, 4); // INC r|(HL)
+		CASESET18_7RHLP(0x05, 8, DEC8, 1, 4); // DEC r|(HL)
+		CASESET16_4RR(0x0B, DEC16, WREG, REG_SP, 0, 1, 8); // DEC rr
+		CASESET28_7RHLPN(0x40, 1, 0x06, LD8, WREG, REG_B); // LD B, r|(HL)|n
+		CASESET28_7RHLPN(0x48, 1, 0x0E, LD8, WREG, REG_C); // LD C, r|(HL)|n
+		CASESET28_7RHLPN(0x50, 1, 0x16, LD8, WREG, REG_D); // LD D, r|(HL)|n
+		CASESET28_7RHLPN(0x58, 1, 0x1E, LD8, WREG, REG_E); // LD E, r|(HL)|n
+		CASESET28_7RHLPN(0x60, 1, 0x26, LD8, WREG, REG_H); // LD H, r|(HL)|n
+		CASESET28_7RHLPN(0x68, 1, 0x2E, LD8, WREG, REG_L); // LD L, r|(HL)|n
 		CASESET28_7RN(0x70, 1, 0x36, LD8, WMEM8, REG_HL, 8, 12, HLM_RETURN); // LD (HL), r|n
-		CASESET28_7RHLPN(0x78, 1, 0x3E, LD8, WREG8, REG_A); // LD A, r|(HL)|n
-		CASESET28_7RHLPN(0x80, 1, 0xC6, ADD8, WREG8, REG_A); // ADD A, r|(HL)|n
-		CASESET28_7RHLPN(0x88, 1, 0xCE, ADC, WREG8, REG_A); // ADC A, r|(HL)|n
-		CASESET28_7RHLPN(0x90, 1, 0xD6, SUB, WREG8, REG_A); // SUB A, r|(HL)|n
-		CASESET28_7RHLPN(0x98, 1, 0xDE, SBC, WREG8, REG_A); // SBC A, r|(HL)|n
-		CASESET28_7RHLPN(0xA0, 1, 0xE6, AND, WREG8, REG_A); // AND A, r|(HL)|n
-		CASESET28_7RHLPN(0xA8, 1, 0xEE, XOR, WREG8, REG_A); // XOR A, r|(HL)|n
-		CASESET28_7RHLPN(0xB0, 1, 0xF6, OR, WREG8, REG_A); // OR A, r|(HL)|n
+		CASESET28_7RHLPN(0x78, 1, 0x3E, LD8, WREG, REG_A); // LD A, r|(HL)|n
+		CASESET28_7RHLPN(0x80, 1, 0xC6, ADD8, WREG, REG_A); // ADD A, r|(HL)|n
+		CASESET28_7RHLPN(0x88, 1, 0xCE, ADC, WREG, REG_A); // ADC A, r|(HL)|n
+		CASESET28_7RHLPN(0x90, 1, 0xD6, SUB, WREG, REG_A); // SUB A, r|(HL)|n
+		CASESET28_7RHLPN(0x98, 1, 0xDE, SBC, WREG, REG_A); // SBC A, r|(HL)|n
+		CASESET28_7RHLPN(0xA0, 1, 0xE6, AND, WREG, REG_A); // AND A, r|(HL)|n
+		CASESET28_7RHLPN(0xA8, 1, 0xEE, XOR, WREG, REG_A); // XOR A, r|(HL)|n
+		CASESET28_7RHLPN(0xB0, 1, 0xF6, OR, WREG, REG_A); // OR A, r|(HL)|n
 		CASESET28_7RHLPN(0xB8, 1, 0xFE, SUB, WIGN, REG_A); // CP A, r|(HL)|n
+		CASESET16_4RR(0xC1, NOP, WPOP, REG_AF, 0, 1, 12); // POP rr
+		CASESET16_4RR(0xC5, NOP, WPUSH, REG_AF, 0, 1, 16); // PUSH rr
 	} // end operation lookup and execution
 }; // end interpret_once()
 
