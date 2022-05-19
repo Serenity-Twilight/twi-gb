@@ -18,14 +18,14 @@
 // along with twi-gb. If not, see <https://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------
 //=======================================================================
-#include <../src/twi/gb/cpu.c>
-#include <../src/twi/gb/mem.c>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <twi/std/assertf.h>
 #include <twi/std/test.h>
+#include <../src/twi/gb/cpu.c>
+#include <../src/twi/gb/mem.c>
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -40,7 +40,7 @@
 //=======================================================================
 enum testcpu_type8 {
 	TESTCPU_TYPE_REG8, // Indicates index of 8-bit register
-	TESTCPU_TYPE_REG16PTR, // Indicates index of 16-bit register for use as a pointer to memory
+	TESTCPU_TYPE_REG16PTR, // Indicates index of 16-bit register for use as a pointer an 8-bit memory location
 	TESTCPU_TYPE_BIT, // Indicates a literal bit offset
 	TESTCPU_TYPE_IMMED8, // Indicates use of unsigned 8-bit immediate
 	TESTCPU_TYPE_NONE // Indicates that there is no operand
@@ -73,6 +73,11 @@ static void testcpu_init(struct twi_gb_cpu* restrict);
 static void testcpu_setprog(
 		struct twi_gb_mem* restrict, uint_fast16_t,
 		const uint8_t* restrict, uint_fast8_t
+);
+static uint8_t testcpu_setrand8(
+		struct twi_gb_cpu* restrict, struct twi_gb_cpu* restrict,
+		struct twi_gb_mem* restrict, struct twi_gb_mem* restrict,
+		enum testcpu_type8, uint8_t
 );
 static uint_fast8_t testcpu8(
 		const char* restrict, uint_fast16_t, const uint8_t* restrict,
@@ -335,7 +340,7 @@ testcpu_setprog(
 // def testcpu_setrand8()
 // TODO
 //=======================================================================
-uint8_t
+static uint8_t
 testcpu_setrand8(
 		struct twi_gb_cpu* restrict cpu1,
 		struct twi_gb_cpu* restrict cpu2,
