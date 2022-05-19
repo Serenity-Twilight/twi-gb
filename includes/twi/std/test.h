@@ -33,21 +33,19 @@
 // Tests a condition, and, if the condition evaluates to false,
 // prints a message to `stderr` indicating the location of the failure
 // and the condition which triggered it.
-//
-// Additionally, the program will locally jump to the label `test_fail`.
-// It is recommend the user print as much information as possible about
-// the state of the test context at the operation which failed.
+// Additionally, the program will locally jump to `failure_label`.
 //
 // If the condition evaluates to true, then no message is printed and
 // no jump occurs.
 //-----------------------------------------------------------------------
 // Parameters:
+// * failure_label: The label which is jumped to on test failure.
 // * condition: A conditions which evaluates to a boolean type.
 //=======================================================================
-#define twi_test(condition) \
+#define twi_test(failure_label, condition) \
 	if (!(condition)) { \
 		fprintf(stderr, "Test failed (" #condition ")\n" __FILE__ ":%s():%ld\n", __func__, __LINE__); \
-		goto test_fail; \
+		goto failure_label; \
 	}
 
 #endif // TWI_TEST_H

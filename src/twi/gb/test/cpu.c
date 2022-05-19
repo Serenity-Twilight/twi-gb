@@ -205,23 +205,23 @@ testcpu_register_coherency() {
 	REG_E = 0x85;
 	REG_H = 0x80;
 	REG_L = 0x0;
-	twi_test(REG_AF == 0xA611);
-	twi_test(REG_BC == 0xE239);
-	twi_test(REG_DE == 0x5785);
-	twi_test(REG_HL == 0x8000);
+	twi_test(test_fail, REG_AF == 0xA611);
+	twi_test(test_fail, REG_BC == 0xE239);
+	twi_test(test_fail, REG_DE == 0x5785);
+	twi_test(test_fail, REG_HL == 0x8000);
 	// Test rr-to-r coherency. Values are arbitrary.
 	REG_AF = 0x1234;
 	REG_BC = 0x9581;
 	REG_DE = 0xABC9;
 	REG_HL = 0x82F7;
-	twi_test(REG_A == 0x12);
-	twi_test(REG_F == 0x34);
-	twi_test(REG_B == 0x95);
-	twi_test(REG_C == 0x81);
-	twi_test(REG_D == 0xAB);
-	twi_test(REG_E == 0xC9);
-	twi_test(REG_H == 0x82);
-	twi_test(REG_L == 0xF7);
+	twi_test(test_fail, REG_A == 0x12);
+	twi_test(test_fail, REG_F == 0x34);
+	twi_test(test_fail, REG_B == 0x95);
+	twi_test(test_fail, REG_C == 0x81);
+	twi_test(test_fail, REG_D == 0xAB);
+	twi_test(test_fail, REG_E == 0xC9);
+	twi_test(test_fail, REG_H == 0x82);
+	twi_test(test_fail, REG_L == 0xF7);
 	return 0;
 
 test_fail:
@@ -246,6 +246,17 @@ test_fail:
 } // end testcpu_register_coherency()
 
 //=======================================================================
+// def testcpu_load_integration()
+// 
+// Runs tests to check that the CPU responds to load requests as expected.
+//-----------------------------------------------------------------------
+// Returns: The number of tests that failed.
+//=======================================================================
+static size_t
+testcpu_load_integration() {
+} // end test_cpu_load_integration()
+
+//=======================================================================
 // def testcpu_arithmetic_integration()
 //
 // Runs tests to check that the CPU responds to arithmetic requests as
@@ -253,7 +264,7 @@ test_fail:
 //-----------------------------------------------------------------------
 // Returns: The number of tests that failed.
 //=======================================================================
-size_t
+static size_t
 testcpu_arithmetic_integration() {
 	size_t fail_count;
 	fail_count += testcpu_arith18("INC", 0x04, INC8);
@@ -499,8 +510,8 @@ testcpu8(
 			interpret_once(&actual_cpu, &actual_mem);
 
 			// Compare (twi_test will jump to the `test_fail` label on failure).
-			twi_test(!memcmp(&expected_cpu, &actual_cpu, sizeof(struct twi_gb_cpu)));
-			twi_test(!memcmp(&expected_mem, &actual_mem, sizeof(struct twi_gb_mem)));
+			twi_test(test_fail, !memcmp(&expected_cpu, &actual_cpu, sizeof(struct twi_gb_cpu)));
+			twi_test(test_fail, !memcmp(&expected_mem, &actual_mem, sizeof(struct twi_gb_mem)));
 		} // end iteration through `rhs`
 	} // end iteration through `lhs`
 
