@@ -18,11 +18,7 @@
 // along with twi-gb. If not, see <https://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------
 //=======================================================================
-#ifndef TWI_GB_CPU_C
-#define TWI_GB_CPU_C
-
 #include <inttypes.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <twi/gb/cpu.h>
@@ -99,132 +95,6 @@
 #define FBIT_N 6
 #define FBIT_H 5
 #define FBIT_CY 4
-
-//=======================================================================
-// Macros which exploit patterns in the GB CPU instruction set in order
-// to cover a large number of like instructions via a single macro.
-// Each of these sets of cases it quite simply known as a "case set".
-//
-// The arguments which may appear for a case set macro are as follows:
-// * offset: The integral constant which triggers the first case of a
-//   case set.
-// * stride: The integral constant which all cases are the first in the
-//   set are incremented.
-//   For example, the 2nd case will trigger at (`offset` + `stride`).
-//   The 3rd case at  (`offset` + `stride` * 2).
-//   And so on.
-// * n_offset: The integral constant which triggers the case of a set
-//   in which an unsigned 8-bit immediate `n` is the RHS argument.
-// * op: The two-operand operation to be executed.
-//   Operations should not assign values or otherwise modify variables
-//   in macros which accept the `set` argument. If the `set` argument is
-//   not present, however, then it is `op`'s responsibility to assign the
-//   outcome of the operation to its intended destination.
-// * set: An operation which defines how to assign the result of `op`.
-//   `set` operations should accept 2 arguments:
-//   1. The first argument is the left-hand side argument of the `op` operation.
-//   2. The second argument is the result of the `op` operation.
-// * lhs: The left-hand side argument for all cases.
-// * cyc: The number of cycles consumed by the operation when the
-//   right-hand side argument is a register.
-// * HLM_cyc: The number of cycles consumed by the operation when the
-//   right-hand side argument is memory pointed to by REG_HL.
-// * n_cyc: The number of cycles consumed by the operation when the
-//   right-hand side argument is an unsigned 8-bit immediate.
-// * ib: The number of bytes to advance the instruction pointer (PC).
-// * ret: The return value at the end of each case statement.
-//=======================================================================
-
-// The base case from which all casesets are constructed.
-#define CASE(offset, op, set, lhs, rhs, ib, cyc, ret) \
-	case offset: set(lhs, op(&REG_F, lhs, rhs)); ADV(ib, cyc); return (ret)
-
-// Defines 7 switch cases for instructions which accept 2 8-bit operands.
-//
-// The left-hand side argument for each instruction is the value of `lhs`.
-//
-// The right-hand side argument for each instruction is the value of 
-// one of the following 8-bit registers, used in the listed order:
-// B, C, D, E, H, L, A
-//
-// (offset + stride * 6) is skipped when enumerating cases,
-// so as to match the pattern used by actual instructions which is
-// caseset seeks to imitate.
-#define CASESET28_7RN(offset, stride, n_offset, op, set, lhs, cyc, ret) \
-	case offset             : set(lhs, op(&REG_F, lhs, REG_B)); ADV(1, cyc); return (ret); \
-	case offset + stride    : set(lhs, op(&REG_F, lhs, REG_C)); ADV(1, cyc); return (ret); \
-	case offset + stride * 2: set(lhs, op(&REG_F, lhs, REG_D)); ADV(1, cyc); return (ret); \
-	case offset + stride * 3: set(lhs, op(&REG_F, lhs, REG_E)); ADV(1, cyc); return (ret); \
-	case offset + stride * 4: set(lhs, op(&REG_F, lhs, REG_H)); ADV(1, cyc); return (ret); \
-	case offset + stride * 5: set(lhs, op(&REG_F, lhs, REG_L)); ADV(1, cyc); return (ret); \
-	case offset + stride * 7: set(lhs, op(&REG_F, lhs, REG_A)); ADV(1, cyc); return (ret); \
-	case n_offset           : set(lhs, op(&REG_F, lhs, IMMED8)); ADV(2, cyc+4); return (ret)
-
-// Same as CASESET28_7RN, and handles an additional opcode at (offset + stride * 6)
-// when the rhs value originates from memory pointed to by the value of REG_HL.
-//
-// This version of the CASESET28 macro does not accept cycle arguments
-// or a return expression, as the pattern of instruction which this
-// macro applies to all share identical values for these arguments.
-// Cycles when the right-hand side argument is a...
-// 8-bit register: 4
-// 16-bit pointer in REG_HL: 8
-// Unsigned 8-bit immediate: 8
-#define CASESET28_7RHLPN(offset, stride, n_offset, op, set, lhs) \
-	CASESET28_7RN(offset, stride, n_offset, op, set, lhs, 4, 0); \
-	case offset + stride * 6: set(lhs, op(&REG_F, lhs, twi_gb_mem_read8(MEM_PTR, REG_HL))); ADV(1, 8); return 0
-
-// Defines 8 switch cases for instructions which accept 1 8-bit operand.
-// 
-// The singular operand for each instruction is the value of one of the
-// following, used in the listed order:
-// B, C, D, E, H, L, (HL), A
-//
-// Operations (passed as `op`) should accept 3 arguments (f, lhs, unused),
-// as if the operation accepts 2 operands. This is so that all operation
-// functions share the same signature, which makes the CPU easier to test.
-// The value passed as the 3rd argument is arbitrary and should be ignored.
-//
-// `cyc` defines the number of cycles consumed
-// when the operand is an 8-bit register.
-// When the operand is a pointer to memory,
-// the number of cycles consumed is (`cyc` + 8).
-#define CASESET18_7RHLP(offset, stride, op, ib, cyc) \
-	case offset             : REG_B = op(&REG_F, REG_B, 0); ADV(ib, cyc); return 0; \
-	case offset + stride    : REG_C = op(&REG_F, REG_C, 0); ADV(ib, cyc); return 0; \
-	case offset + stride * 2: REG_D = op(&REG_F, REG_D, 0); ADV(ib, cyc); return 0; \
-	case offset + stride * 3: REG_E = op(&REG_F, REG_E, 0); ADV(ib, cyc); return 0; \
-	case offset + stride * 4: REG_H = op(&REG_F, REG_H, 0); ADV(ib, cyc); return 0; \
-	case offset + stride * 5: REG_L = op(&REG_F, REG_L, 0); ADV(ib, cyc); return 0; \
-	case offset + stride * 6: WMEM8(REG_HL, op(&REG_F, twi_gb_mem_read8(MEM_PTR, REG_HL), 0)); ADV(ib, (cyc) + 8); return HL_PTR_RETURN; \
-	case offset + stride * 7: REG_A = op(&REG_F, REG_A, 0); ADV(ib, cyc); return 0
-
-// Defines 4 switch cases with user provided operands.
-// Supports operations with both 1 and 2 operands.
-// Intended for usage with 16-bit instructions.
-//
-// Due to the inconsistency of instructions "following" this pattern,
-// all lhs and rhs arguments are provided by the user.
-// Operands are paired with the operand with the like-index.
-// Example:
-// op(lhs1, rhs1)
-// op(lhs2, rhs2)
-// and so on.
-// 
-// No stride argument is accepted as instructions following this
-// caseset pattern all share the same stride.
-#define CASESET16_4(offset, op, set, lhs1, lhs2, lhs3, lhs4, rhs1, rhs2, rhs3, rhs4, ib, cyc, ret) \
-	case offset       : set(lhs1, op(&REG_F, lhs1, rhs1)); ADV(ib, cyc); return (ret); \
-	case offset + 0x10: set(lhs2, op(&REG_F, lhs2, rhs2)); ADV(ib, cyc); return (ret); \
-	case offset + 0x20: set(lhs3, op(&REG_F, lhs3, rhs3)); ADV(ib, cyc); return (ret); \
-	case offset + 0x30: set(lhs4, op(&REG_F, lhs4, rhs4)); ADV(ib, cyc); return (ret)
-
-// A version of CASESET16_4 with the following restrictions:
-// * lhs follows the pattern of BC, DE, HL, and a fourth register specified
-//   by the user via `case4_lhs`, in that order.
-// * A single rhs value, provided by the user, is used by all four cases.
-#define CASESET16_4RR(offset, op, set, lhs4, rhs, ib, cyc, ret) \
-	CASESET16_4(offset, op, set, REG_BC, REG_DE, REG_HL, lhs4, rhs, rhs, rhs, rhs, ib, cyc, ret)
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -365,46 +235,6 @@ immeds8(
 #define IMMEDs8 immeds8(CPU_PTR, MEM_PTR)
 
 //=======================================================================
-// def fset()
-//
-// Define all flags.
-//-----------------------------------------------------------------------
-// Parameters:
-// * f: Pointer to flag register to set.
-//   Behavior is undefined if `f` points to NULL.
-// * z: Value of the zero flag bit.
-// * n: Value of the subtraction flag bit.
-// * h: Value of the half-carry flag bit.
-// * cy: Value of the carry flag bit.
-//=======================================================================
-static inline void
-fset(uint8_t* restrict f, bool z, bool n, bool h, bool cy) {
-	twi_assert_notnull(f);
-	*f = (z << FBIT_Z) | (n << FBIT_N) | (h << FBIT_H) | (cy << FBIT_CY);
-} // end fset()
-
-//=======================================================================
-// def fget()
-//
-// Retrieve flag bit value.
-//-----------------------------------------------------------------------
-// Parameters:
-// * f: Pointer to flag register to read.
-//   Behavior is undefined if `f` points to NULL.
-// * bit: Bit offset of requested flag.
-//   Behavior is undefined if `bit` is not a valid flag bit offset.
-//
-// Returns: True/1 if the requested bit is set, or false/0 if it is reset.
-//=======================================================================
-static inline bool
-fget(uint8_t* restrict f, uint_fast8_t bit) {
-	twi_assert_notnull(f);
-	twi_assertf(bit == FBIT_Z || bit == FBIT_N || bit == FBIT_H || bit == FBIT_CY,
-			"`bit` (underlying value: %d) must be one of: z, n, h, or cy.", bit);
-	return (*f & (0x1 << bit));
-} // end fget()
-
-//=======================================================================
 // def ADV()
 //
 // Advances the instruction pointer (pc) and cycle counter (div) of
@@ -418,12 +248,13 @@ fget(uint8_t* restrict f, uint_fast8_t bit) {
 #define ADV(ib, cyc) (CPU_PTR)->pc += ib; (CPU_PTR)->div += cyc
 
 //=======================================================================
-// Operation functions.
-//
-// Behavior is undefined if `f` points to NULL.
+// Load, arithmetic, logical, and bitwise operation functions
 //-----------------------------------------------------------------------
 // Parameters:
-// * f: A pointer to the 8-bit flag register.
+// * cpu: A pointer to twi-gb-cpu executing the operation.
+//   Operations will modify flags but perform no other modifications to
+//   the CPU. Behavior is undefined if `cpu` does not point to a valid
+//   twi-gb-cpu object.
 // * lhs: The left-hand side 8-bit or 16-bit value.
 // * rhs: The right-hand side 8-bit or 16-bit value.
 //
@@ -447,8 +278,14 @@ fget(uint8_t* restrict f, uint_fast8_t bit) {
 //
 // Discard lhs and return rhs. No flag changes.
 //-----------------------------------------------------------------------
-static inline uint8_t LD8(uint8_t* restrict, uint8_t, uint8_t rhs) { return rhs; }
-static inline uint16_t LD16(uint8_t* restrict, uint16_t, uint16_t rhs) { return rhs; }
+static inline uint8_t
+LD8(struct twi_gb_cpu* restrict, uint8_t, uint8_t rhs) {
+	return rhs;
+} // end LD8()
+static inline uint16_t
+LD16(struct twi_gb_cpu* restrict, uint16_t, uint16_t rhs) {
+	return rhs;
+} // end LD16()
 
 //-----------------------------------------------------------------------
 // 8-bit addition operations
@@ -461,15 +298,22 @@ static inline uint16_t LD16(uint8_t* restrict, uint16_t, uint16_t rhs) { return 
 // h: Set on carry from bit 3, else reset.
 // cy: Set if overflow occurs, else reset.
 //-----------------------------------------------------------------------
-static inline uint8_t ADD8(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+static inline uint8_t
+ADD8(struct twi_gb_cpu* restrict cpu, uint8_t lhs, uint8_t rhs) {
 	uint16_t sum = lhs + rhs;
-	fset(f, ((uint8_t)sum) == 0, 0, ((lhs & 0xF) + (rhs & 0xF)) > 0xF, sum > 0xFF);
+	cpu->z = ((uint8_t)sum) == 0;
+	cpu->n = 0;
+	cpu->h = ((lhs & 0xF) + (rhs & 0xF)) > 0xF;
+	cpu->cy = sum > 0xFF;
 	return (uint8_t)sum;
 } // end ADD8()
-static inline uint8_t ADC(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
-	bool cy = fget(f, FBIT_CY);
-	uint16_t sum = lhs + rhs + cy;
-	fset(f, ((uint8_t)sum) == 0, 0, ((lhs & 0xF) + (rhs & 0xF) + cy) > 0xF, sum > 0xFF);
+static inline uint8_t
+ADC(struct twi_gb_cpu* restrict cpu, uint8_t lhs, uint8_t rhs) {
+	uint16_t sum = lhs + rhs + cpu->cy;
+	cpu->z = ((uint8_t)sum) == 0;
+	cpu->n = 0;
+	cpu->h = ((lhs & 0xF) + (rhs & 0xF) + cpu->cy) > 0xF;
+	cpu->cy = sum > 0xFF;
 	return (uint8_t)sum;
 } // end ADC()
 
@@ -482,9 +326,12 @@ static inline uint8_t ADC(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
 // h: Set on carry from bit 11, else reset.
 // cy: Set on carry from bit 15, else reset.
 //-----------------------------------------------------------------------
-static inline uint16_t ADD16(uint8_t* restrict f, uint16_t lhs, uint16_t rhs) {
+static inline uint16_t
+ADD16(struct twi_gb_cpu* restrict cpu, uint16_t lhs, uint16_t rhs) {
 	uint32_t sum = lhs + rhs;
-	fset(f, fget(f, FBIT_Z), 0, ((lhs & 0xFFF) + (rhs & 0xFFF)) > 0xFFF, sum > 0xFFFF);
+	cpu->n = 0;
+	cpu->h = ((lhs & 0xFFF) + (rhs & 0xFFF)) > 0xFFF;
+	cpu->cy = sum > 0xFFFF;
 	return (uint16_t)sum;
 } // end ADD16()
 
@@ -499,15 +346,22 @@ static inline uint16_t ADD16(uint8_t* restrict f, uint16_t lhs, uint16_t rhs) {
 // h: Set on borrow from bit 4, else reset.
 // cy: Set on borrow from bit 8, else reset.
 //-----------------------------------------------------------------------
-static inline uint8_t SUB(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+static inline uint8_t
+SUB(struct twi_gb_cpu* restrict cpu, uint8_t lhs, uint8_t rhs) {
 	uint16_t diff = lhs - rhs;
-	fset(f, diff == 0, 1, ((lhs & 0xF) - (rhs - 0xF)) > 0xF, diff > 0xFF);
+	cpu->z = diff == 0;
+	cpu->n = 1;
+	cpu->h = ((lhs & 0xF) - (rhs & 0xF)) > 0xF;
+	cpu->cy = diff > 0xFF;
 	return (uint8_t)diff;
 } // end SUB()
-static inline uint8_t SBC(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
-	bool cy = fget(f, FBIT_CY);
-	uint16_t diff = lhs - rhs - cy;
-	fset(f, diff == 0, 1, ((lhs & 0xF) - (rhs & 0xF) - cy) > 0xF, diff > 0xFF);
+static inline uint8_t
+SBC(struct twi_gb_cpu* restrict cpu, uint8_t lhs, uint8_t rhs) {
+	uint16_t diff = lhs - rhs - cpu->cy;
+	cpu->z = diff == 0;
+	cpu->n = 1;
+	cpu->h = ((lhs & 0xF) - (rhs & 0xF) - cpu->cy) > 0xF;
+	cpu->cy = diff > 0xFF;
 	return (uint8_t)diff;
 } // end SBC()
 
@@ -519,22 +373,34 @@ static inline uint8_t SBC(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
 //
 // z: Set if result is 0, else reset.
 // n: Reset.
-// h: Set for AND, else reset.
+// h: Set on AND, else reset.
 // cy: Reset.
 //-----------------------------------------------------------------------
-static inline uint8_t AND(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+static inline uint8_t
+AND(struct twi_gb_cpu* restrict cpu, uint8_t lhs, uint8_t rhs) {
 	uint8_t result = lhs & rhs;
-	fset(f, result == 0, 0, 1, 0);
+	cpu->z = result == 0;
+	cpu->n = 0;
+	cpu->h = 1;
+	cpu->cy = 0;
 	return result;
 } // end AND()
-static inline uint8_t XOR(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+static inline uint8_t
+XOR(struct twi_gb_cpu* restrict cpu, uint8_t lhs, uint8_t rhs) {
 	uint8_t result = lhs ^ rhs;
-	fset(f, result == 0, 0, 0, 0);
+	cpu->z = result == 0;
+	cpu->n = 0;
+	cpu->h = 0;
+	cpu->cy = 0;
 	return result;
 } // end XOR()
-static inline uint8_t OR(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
+static inline uint8_t
+OR(struct twi_gb_cpu* restrict cpu, uint8_t lhs, uint8_t rhs) {
 	uint8_t result = lhs | rhs;
-	fset(f, result == 0, 0, 0, 0);
+	cpu->z = result == 0;
+	cpu->n = 0;
+	cpu->h = 0;
+	cpu->cy = 0;
 	return result;
 } // end OR()
 
@@ -543,21 +409,25 @@ static inline uint8_t OR(uint8_t* restrict f, uint8_t lhs, uint8_t rhs) {
 // def INC8()
 // def INC16()
 //
-// Increment lhs value by 1. Rhs value is ignored.
+// Increment lhs value by 1. Rhs is ignored.
 //
 // NOTE: 16-bit versions make no flag changes.
 // 8-bit flag changes:
-// z: Set if result is 0, else reset.
+// z: Set if sum is 0, else reset.
 // h: Reset.
 // n: Set on carry from bit 3, else reset.
 // cy: No change.
 //-----------------------------------------------------------------------
-static inline uint8_t INC8(uint8_t* restrict f, uint8_t lhs, uint8_t) {
+static inline uint8_t
+INC8(struct twi_gb_cpu* restrict cpu, uint8_t lhs, uint8_t) {
 	uint8_t sum = lhs + 1;
-	fset(f, sum == 0, 0, (lhs & 0xF) == 0xF, fget(f, FBIT_CY));
+	cpu->z = sum == 0;
+	cpu->n = 0;
+	cpu->h = (lhs & 0xF) == 0xF;
 	return sum;
 } // end INC8()
-static inline uint16_t INC16(uint8_t* restrict, uint16_t lhs, uint16_t) {
+static inline uint16_t
+INC16(struct twi_gb_cpu* restrict, uint16_t lhs, uint16_t) {
 	return lhs + 1;
 } // end INC16()
 
@@ -566,21 +436,25 @@ static inline uint16_t INC16(uint8_t* restrict, uint16_t lhs, uint16_t) {
 // def DEC8()
 // def DEC16()
 //
-// Decrement lhs value by 1. Rhs value is ignored.
+// Decrement lhs value by 1. Rhs is ignored.
 //
 // NOTE: 16-bit versions make no flag changes.
 // 8-bit flag changes:
-// z: Set if result is 0, else reset.
+// z: Set if difference is 0, else reset.
 // h: Set.
 // n: Set on borrow from bit 4, else reset.
 // cy: No change.
 //-----------------------------------------------------------------------
-static inline uint8_t DEC8(uint8_t* restrict f, uint8_t lhs, uint8_t) {
+static inline uint8_t
+DEC8(struct twi_gb_cpu* restrict cpu, uint8_t lhs, uint8_t) {
 	uint8_t diff = lhs - 1;
-	fset(f, diff == 0, 1, (lhs & 0xF) == 0, fget(f, FBIT_CY));
+	cpu->z = diff == 0;
+	cpu->n = 1;
+	cpu->h = (lhs & 0xF) == 0;
 	return diff;
 } // end DEC8()
-static inline uint16_t DEC16(uint8_t* restrict, uint16_t lhs, uint16_t) {
+static inline uint16_t
+DEC16(struct twi_gb_cpu* restrict, uint16_t lhs, uint16_t) {
 	return lhs - 1;
 } // end DEC16()
 
@@ -635,7 +509,7 @@ static inline uint16_t DEC16(uint8_t* restrict, uint16_t lhs, uint16_t) {
 // contained within the twi-gb-cpu pointed to by the alias of CPU_PTR.
 // Then increment that SP register by 2.
 //-----------------------------------------------------------------------
-#define WPUSH(rr, ignored) \
+#define WPUSH(rr, ...)\
 	twi_gb_mem_write16(MEM_PTR, (CPU_PTR)->sp, rr); \
 	(CPU_PTR)->sp += 2
 
@@ -647,12 +521,12 @@ static inline uint16_t DEC16(uint8_t* restrict, uint16_t lhs, uint16_t) {
 // contained with that SP register from the twi-gb-mem pointed to by the
 // alias MEM_PTR.
 //-----------------------------------------------------------------------
-#define WPOP(rr, ignored) \
+#define WPOP(rr, ...) \
 	(CPU_PTR)->sp -= 2; \
 	(rr) = twi_gb_mem_read16(MEM_PTR, (CPU_PTR)->sp)
 
 //=======================================================================
-// def HL_PTR_RETURN
+// def HLPTR_RETURN
 //
 // Common return expression, used for when writing to a memory address
 // pointed to the 16-bit HL register. Signals the caller when the value
@@ -663,7 +537,283 @@ static inline uint16_t DEC16(uint8_t* restrict, uint16_t lhs, uint16_t) {
 // The main interpreter loop will need to re-evaluate active interupts
 // every time the value at 0xFFFF changes.
 //=======================================================================
-#define HL_PTR_RETURN ((REG_HL == 0xFFFF) ? -1 : 0)
+#define HLPTR_RETURN ((REG_HL == 0xFFFF) ? -1 : 0)
+
+//=======================================================================
+// Jump operations
+//
+// Jump instructions are simpler and less versatile than arithmetic
+// instructions, but require greater operational context.
+// They require insight of the memory map in which the program resides,
+// but they will modify the instruction pointer and the DIV counter
+// on their own.
+//-----------------------------------------------------------------------
+// Parameters:
+// * cpu: Pointer to the executing twi-gb-cpu.
+//   Jump operation functions will never modify any value in `cpu` other
+//   than the SP and PC registers.
+//   Behavior is undefined if `cpu` does not point to a valid twi-gb-cpu.
+// * mem: Pointer to the memory map containing the running program.
+//   Behavior is undefined if `mem` does not point to an active
+//   twi-gb-mem object.
+// * cond: Denotes the evaluation of the jump condition:
+//   * 0: Jump condition evaluated as false.
+//   * 1: Jump condition evaluated as true.
+//   * 2: Jump is unconditional.
+//   Behavior is undefined if any value is provided other than those
+//   enumerated above.
+//=======================================================================
+
+//-----------------------------------------------------------------------
+// def JP()
+// If `cond` != 0, jumps to the address indicated by the 16-bit unsigned
+// immediate following the opcode.
+//-----------------------------------------------------------------------
+static inline void
+JP(
+		struct twi_gb_cpu* restrict cpu,
+		const struct twi_gb_mem* restrict mem,
+		uint_fast8_t cond
+) {
+	if (cond) {
+		cpu->pc = immed16(cpu, mem);
+		cpu->div += 16;
+	} else {
+		cpu->pc += 3;
+		cpu->div += 12;
+	}
+} // end JP()
+
+//-----------------------------------------------------------------------
+// def JR()
+// If `cond` != 0, jumps to an address relative to the current address
+// offset by the signed 8-bit immediate following the opcode.
+//-----------------------------------------------------------------------
+static inline void
+JR(
+		struct twi_gb_cpu* restrict cpu,
+		const struct twi_gb_mem* restrict mem,
+		uint_fast8_t cond
+) {
+	if (cond) {
+		cpu->pc += immeds8(cpu, mem) + 2;
+		cpu->div += 12;
+	} else {
+		cpu->pc += 2;
+		cpu->div += 8;
+	}
+} // end JR()
+
+//-----------------------------------------------------------------------
+// def CALL()
+// If `cond` != 0, pushes the address of the instruction following the
+// current instruction to the stack, and jumps to the address indicated
+// by the 16-bit immediate following the opcode.
+//-----------------------------------------------------------------------
+static inline void
+CALL(
+		struct twi_gb_cpu* restrict cpu,
+		struct twi_gb_mem* restrict mem,
+		uint_fast8_t cond
+) {
+	if (cond) {
+		cpu->sp -= 2;
+		twi_gb_mem_write16(mem, cpu->sp, cpu->pc + 3);
+		cpu->pc = immed16(cpu, mem);
+		cpu->div += 24;
+	} else {
+		cpu->pc += 3;
+		cpu->div += 12;
+	}
+} // end CALL()
+
+//-----------------------------------------------------------------------
+// def RET()
+// If `cond` != 0, pops a 2-byte address off the stack and jumps to it.
+//-----------------------------------------------------------------------
+static inline void
+RET(
+		struct twi_gb_cpu* restrict cpu,
+		const struct twi_gb_mem* restrict mem,
+		uint_fast8_t cond
+) {
+	switch (cond) {
+		case 0: // Condition failed
+			cpu->pc += 1;
+			cpu->div += 8;
+			break;
+		case 1: // Condition succeeded
+			cpu->pc = twi_gb_mem_read16(mem, cpu->sp);
+			cpu->sp += 2;
+			cpu->div += 20;
+			break;
+		case 2: // Unconditional, 4 fewer cycles than a successful condition
+			cpu->pc = twi_gb_mem_read16(mem, cpu->sp);
+			cpu->sp += 2;
+			cpu->div += 16;
+			break;
+	} // end switch (cond)
+} // end RET()
+
+//-----------------------------------------------------------------------
+// def RST()
+// Unconditional jump.
+// Instead, the third argument is `addr`, representing the jump's
+// destination address.
+// Otherwise identical to call, in that it pushes the address of the
+// instruction following it to the stack.
+//-----------------------------------------------------------------------
+static inline void
+RST(
+		struct twi_gb_cpu* restrict cpu,
+		struct twi_gb_mem* restrict mem,
+		uint8_t addr
+) {
+	cpu->sp -= 2;
+	twi_gb_mem_write16(mem, cpu->sp, cpu->pc + 1);
+	cpu->pc = addr;
+	cpu->div += 16;
+} // end RST()
+
+//=======================================================================
+// Caseset macros
+//
+// Macros which exploit patterns in the GB CPU instruction set in order
+// to cover a large number of instructions representing the same
+// operation with different operands.
+//=======================================================================
+
+//-----------------------------------------------------------------------
+// def CASESET28_7RN()
+// Defines 8 switch cases for instructions which accept 2 8-bit operands.
+// lhs: User-provided, and the same for each case.
+// rhs: An enumeration over the following operands in the listed order:
+// 	B, C, D, E, H, L, A, n
+// Where the first 7 operands represent 8-bit registers, and the `n`
+// operand represents an unsigned 8-bit integer.
+//
+// Parameters:
+// * offset: The 8-bit opcode for the variation of the instruction which
+//   uses `B` as its rhs operand. The opcodes for the remaining
+//   instructions of the same operation using a register as a rhs operand
+//   are deduced from this value.
+// * n_offset: The 8-bit opcode for the variation of the instruction which
+//   uses `n` as its first rhs operand.
+// * op: The operation function. Should be of the format defined for
+//   load, arithmetic, logical, and bitwise operations.
+// * set: Writeback function. Should be of the format defined for
+//   writeback functions.
+// * lhs: The lhs argument shared between all cases.
+// * cyc: The number of cycles it takes the emulated CPU to perform the
+//   variation of this operation which accepts a register as its rhs
+//   argument. The number of cycles when an unsigned 8-bit immediate
+//   is the rhs argument is derived from this automatically.
+// * ret: The return expression. Each instruction will return after
+//   it finishes execution, and an expression can be provided to signal
+//   information to the caller based on the outcome of the instruction.
+//----------------------------------------------------------------------
+#define CASESET28_7RN(offset, n_offset, op, set, lhs, cyc, ret) \
+	case offset    : set(lhs, op(CPU_PTR, lhs, REG_B)); ADV(1, cyc); return (ret); \
+	case offset + 1: set(lhs, op(CPU_PTR, lhs, REG_C)); ADV(1, cyc); return (ret); \
+	case offset + 2: set(lhs, op(CPU_PTR, lhs, REG_D)); ADV(1, cyc); return (ret); \
+	case offset + 3: set(lhs, op(CPU_PTR, lhs, REG_E)); ADV(1, cyc); return (ret); \
+	case offset + 4: set(lhs, op(CPU_PTR, lhs, REG_H)); ADV(1, cyc); return (ret); \
+	case offset + 5: set(lhs, op(CPU_PTR, lhs, REG_L)); ADV(1, cyc); return (ret); \
+	case offset + 7: set(lhs, op(CPU_PTR, lhs, REG_A)); ADV(1, cyc); return (ret); \
+	case n_offset  : set(lhs, op(CPU_PTR, lhs, IMMED8)); ADV(2, (cyc)+4); return (ret)
+
+//-----------------------------------------------------------------------
+// def CASESET28_7RHLPN()
+// An extension of CASESET28_7RN which additionally defines a case for
+// a variation of the instruction which accepts the value at the memory
+// address pointed to by the value within the 16-bit HL register as its
+// rhs operand.
+//
+// This extension does not accept `cyc` or `ret` arguments, as both
+// will always be the same value between all operations which fit
+// this caseset pattern.
+//-----------------------------------------------------------------------
+#define CASESET28_7RHLPN(offset, n_offset, op, set, lhs) \
+	CASESET28_7RN(offset, n_offset, op, set, lhs, 4, 0); \
+	case offset + 6: set(lhs, op(CPU_PTR, lhs, twi_gb_mem_read8(MEM_PTR, REG_HL))); ADV(1, 8); return 0
+
+//-----------------------------------------------------------------------
+// def CASESET18_7RHLP()
+// Defines 8 switch cases for instructions which accept 1 8-bit operand.
+// The operand enumerates between the following in the listed order:
+// 	B, C, D, E, H, L, (HL), A
+// Where single letters represent the value contained within each
+// respective 8-bit register identified by the letter, and `(HL)`
+// represents the memory location pointed to by the address stored in
+// 16-bit register HL.
+//
+// Parameters:
+// * offset: The 8-bit opcode for the variation of the instruction which
+//   uses `B` as its operand. The opcodes for the remaining
+//   instructions of the same operation using a register as an operand
+//   are deduced from this value, as well as the provided `stride`.
+// * stride: The interval between instructions using this operation.
+// * op: The operation function. Should be of the format defined for
+//   load, arithmetic, logical, and bitwise instructions.
+//   This signature is shared with 2-operand operations.
+//   The rhs argument will receive an arbitrary dummy value.
+// * ib: The number of bytes per instruction for this operation.
+// * cyc: The number of cycles required to executed the form of this
+//   operation which uses an 8-bit register as an operand. The variation
+//   which uses `(HL)` as an operand has its cycle consumption deduced
+//   from this.
+//-----------------------------------------------------------------------
+#define CASESET18_7RHLP(offset, stride, op, ib, cyc) \
+	case offset             : REG_B = op(CPU_PTR, REG_B, 0); ADV(ib, cyc); return 0; \
+	case offset + stride    : REG_C = op(CPU_PTR, REG_C, 0); ADV(ib, cyc); return 0; \
+	case offset + stride * 2: REG_D = op(CPU_PTR, REG_D, 0); ADV(ib, cyc); return 0; \
+	case offset + stride * 3: REG_E = op(CPU_PTR, REG_E, 0); ADV(ib, cyc); return 0; \
+	case offset + stride * 4: REG_H = op(CPU_PTR, REG_H, 0); ADV(ib, cyc); return 0; \
+	case offset + stride * 5: REG_L = op(CPU_PTR, REG_L, 0); ADV(ib, cyc); return 0; \
+	case offset + stride * 6: \
+		twi_gb_mem_write8(MEM_PTR, REG_HL, op(CPU_PTR, twi_gb_mem_read8(MEM_PTR, REG_HL), 0)); \
+		ADV(ib, (cyc)+8); return HLPTR_RETURN; \
+	case offset + stride * 7: REG_A = op(CPU_PTR, REG_A, 0); ADV(ib, cyc); return 0
+
+//-----------------------------------------------------------------------
+// def CASESET16_3RR
+// Defines 3 switch cases for instruction which accept either
+// 1 or 2 16-bit operands.
+// The lhs operands enumerate in the order of: BC, DE, HL
+// Where each is a 16-bit register pair.
+// The rhs operand is the same between all cases, and is provided by the user.
+//
+// Parameters:
+// * offset: The 8-bit opcode for the variation of the instruction which
+//   uses `BC` as its lhs operand. The opcodes for the remaining
+//   instructions of the same operation are deduced from this value.
+// * op: The operation function to use for each instruction.
+//   The operation function should use the signature defined for
+//   load, arithmetic, logical, and bitwise instructions.
+// * set: The writeback function used for writing the result to
+//   the lhs 16-bit register. The writeback function should use
+//   the common function signature for writeback functions.
+// * rhs: The rhs operand to use in each instruction defined.
+// * ib: The number of bytes a single instruction of this operation
+//   is composed of.
+// * cyc: The number of cycles consumed by an instruction of this
+//   operation.
+// * ret: The expression used to evaluate the value to return
+//   to the caller after instruction execution completes.
+//-----------------------------------------------------------------------
+#define CASESET16_3RR(offset, op, set, rhs, ib, cyc, ret) \
+	case offset       : set(REG_BC, op(CPU_PTR, REG_BC, rhs)); ADV(ib, cyc); return (ret); \
+	case offset + 0x10: set(REG_DE, op(CPU_PTR, REG_DE, rhs)); ADV(ib, cyc); return (ret); \
+	case offset + 0x20: set(REG_HL, op(CPU_PTR, REG_HL, rhs)); ADV(ib, cyc); return (ret); \
+
+//-----------------------------------------------------------------------
+// def CASESET16_4RR
+// An extension of CASESET16_3RR with an additional case at offset
+// (`offset` + 0x30) which utilizes the SP register as its lhs operand.
+//-----------------------------------------------------------------------
+#define CASESET16_4RR(offset, op, set, rhs, ib, cyc, ret) \
+	CASESET16_3RR(offset, op, set, rhs, ib, cyc, ret); \
+	case offset + 0x30: set((CPU_PTR)->sp, op(CPU_PTR, (CPU_PTR)->sp, rhs)); ADV(ib, cyc); return (ret)
 
 //=======================================================================
 // def interpret_once()
@@ -681,30 +831,48 @@ interpret_once(
 #define MEM_PTR (mem)
 	switch (twi_gb_mem_read8(mem, cpu->pc)) {
 		case 0x00: ADV(1, 4); return 0; // NOP
-		CASESET16_4RR(0x01, LD16, WREG, cpu->sp, IMMED16, 3, 12, 0); // LD rr, nn
-		CASESET16_4RR(0x03, INC16, WREG, cpu->sp, 0, 1, 8, 0); // INC rr
+		CASESET16_4RR(0x01, LD16, WREG, IMMED16, 3, 12, 0); // LD rr, nn
+		CASESET16_4RR(0x03, INC16, WREG, 0, 1, 8, 0); // INC rr
 		CASESET18_7RHLP(0x04, 8, INC8, 1, 4); // INC r|(HL)
 		CASESET18_7RHLP(0x05, 8, DEC8, 1, 4); // DEC r|(HL)
-		CASESET16_4(0x09, ADD16, WREG, REG_HL, REG_HL, REG_HL, REG_HL, REG_BC, REG_DE, REG_HL, cpu->sp, 1, 8, 0); // ADD rr, rr
-		CASESET16_4RR(0x0B, DEC16, WREG, cpu->sp, 0, 1, 8, 0); // DEC rr
-		CASESET28_7RHLPN(0x40, 1, 0x06, LD8, WREG, REG_B); // LD B, r|(HL)|n
-		CASESET28_7RHLPN(0x48, 1, 0x0E, LD8, WREG, REG_C); // LD C, r|(HL)|n
-		CASESET28_7RHLPN(0x50, 1, 0x16, LD8, WREG, REG_D); // LD D, r|(HL)|n
-		CASESET28_7RHLPN(0x58, 1, 0x1E, LD8, WREG, REG_E); // LD E, r|(HL)|n
-		CASESET28_7RHLPN(0x60, 1, 0x26, LD8, WREG, REG_H); // LD H, r|(HL)|n
-		CASESET28_7RHLPN(0x68, 1, 0x2E, LD8, WREG, REG_L); // LD L, r|(HL)|n
-		CASESET28_7RN(0x70, 1, 0x36, LD8, WMEM8, REG_HL, 8, HL_PTR_RETURN); // LD (HL), r|n
-		CASESET28_7RHLPN(0x78, 1, 0x3E, LD8, WREG, REG_A); // LD A, r|(HL)|n
-		CASESET28_7RHLPN(0x80, 1, 0xC6, ADD8, WREG, REG_A); // ADD A, r|(HL)|n
-		CASESET28_7RHLPN(0x88, 1, 0xCE, ADC, WREG, REG_A); // ADC A, r|(HL)|n
-		CASESET28_7RHLPN(0x90, 1, 0xD6, SUB, WREG, REG_A); // SUB A, r|(HL)|n
-		CASESET28_7RHLPN(0x98, 1, 0xDE, SBC, WREG, REG_A); // SBC A, r|(HL)|n
-		CASESET28_7RHLPN(0xA0, 1, 0xE6, AND, WREG, REG_A); // AND A, r|(HL)|n
-		CASESET28_7RHLPN(0xA8, 1, 0xEE, XOR, WREG, REG_A); // XOR A, r|(HL)|n
-		CASESET28_7RHLPN(0xB0, 1, 0xF6, OR, WREG, REG_A); // OR A, r|(HL)|n
-		CASESET28_7RHLPN(0xB8, 1, 0xFE, SUB, WIGN, REG_A); // CP A, r|(HL)|n
-		CASESET16_4RR(0xC1, NOP, WPOP, REG_AF, 0, 1, 12, 0); // POP rr
-		CASESET16_4RR(0xC5, NOP, WPUSH, REG_AF, 0, 1, 16, (cpu->sp - 2) >= 0xFFFE); // PUSH rr
+		// ADD rr, rr
+		case 0x09: REG_HL = ADD16(cpu, REG_HL, REG_BC); ADV(1, 8); return 0; // ADD HL, BC
+		case 0x19: REG_HL = ADD16(cpu, REG_HL, REG_DE); ADV(1, 8); return 0; // ADD HL, DE
+		case 0x29: REG_HL = ADD16(cpu, REG_HL, REG_HL); ADV(1, 8); return 0; // ADD HL, HL
+		case 0x39: REG_HL = ADD16(cpu, REG_HL, cpu->sp); ADV(1, 8); return 0; // ADD HL, SP
+		CASESET16_4RR(0x0B, DEC16, WREG, 0, 1, 8, 0); // DEC rr
+		CASESET28_7RHLPN(0x40, 0x06, LD8, WREG, REG_B); // LD B, r|(HL)|n
+		CASESET28_7RHLPN(0x48, 0x0E, LD8, WREG, REG_C); // LD C, r|(HL)|n
+		CASESET28_7RHLPN(0x50, 0x16, LD8, WREG, REG_D); // LD D, r|(HL)|n
+		CASESET28_7RHLPN(0x58, 0x1E, LD8, WREG, REG_E); // LD E, r|(HL)|n
+		CASESET28_7RHLPN(0x60, 0x26, LD8, WREG, REG_H); // LD H, r|(HL)|n
+		CASESET28_7RHLPN(0x68, 0x2E, LD8, WREG, REG_L); // LD L, r|(HL)|n
+		CASESET28_7RN(0x70, 0x36, LD8, WMEM8, REG_HL, 8, HLPTR_RETURN); // LD (HL), r|n
+		CASESET28_7RHLPN(0x78, 0x3E, LD8, WREG, REG_A); // LD A, r|(HL)|n
+		CASESET28_7RHLPN(0x80, 0xC6, ADD8, WREG, REG_A); // ADD A, r|(HL)|n
+		CASESET28_7RHLPN(0x88, 0xCE, ADC, WREG, REG_A); // ADC A, r|(HL)|n
+		CASESET28_7RHLPN(0x90, 0xD6, SUB, WREG, REG_A); // SUB A, r|(HL)|n
+		CASESET28_7RHLPN(0x98, 0xDE, SBC, WREG, REG_A); // SBC A, r|(HL)|n
+		CASESET28_7RHLPN(0xA0, 0xE6, AND, WREG, REG_A); // AND A, r|(HL)|n
+		CASESET28_7RHLPN(0xA8, 0xEE, XOR, WREG, REG_A); // XOR A, r|(HL)|n
+		CASESET28_7RHLPN(0xB0, 0xF6, OR, WREG, REG_A); // OR A, r|(HL)|n
+		CASESET28_7RHLPN(0xB8, 0xFE, SUB, WIGN, REG_A); // CP A, r|(HL)|n
+		CASESET16_3RR(0xC1, NOP, WPOP, 0, 1, 12, 0); // POP BC|DE|HL
+		case 0xF1: // POP AF: Needs special flag bit conversion.
+			WPOP(REG_AF); ADV(1, 12);
+			cpu->z = (REG_F >> FBIT_Z) & 0x1;
+			cpu->n = (REG_F >> FBIT_N) & 0x1;
+			cpu->h = (REG_F >> FBIT_H) & 0x1;
+			cpu->cy = (REG_F >> FBIT_CY) & 0x1;
+			return 0;
+		CASESET16_3RR(0xC5, NOP, WPUSH, 0, 1, 16, (cpu->sp - 2) >= 0xFFFE); // PUSH BC|DE|HL
+		case 0xF5: // PUSH AF: Needs special flag bit conversion.
+			REG_F = cpu->z << FBIT_Z
+			      | cpu->n << FBIT_N
+			      | cpu->h << FBIT_H
+			      | cpu->cy << FBIT_CY;
+			WPUSH(REG_AF); ADV(1, 16);
+			return (cpu->sp - 2) >= 0xFFFE;
 	} // end operation lookup and execution
 #undef CPU_PTR
 #undef MEM_PTR
@@ -815,6 +983,4 @@ void twi_gb_cpu_diffdump(
 	
 	fprintf(dest, "== end twi-gb-cpu diffdump ==\n");
 } // end twi_gb_cpu_dump()
-
-#endif // TWI_GB_CPU_C
 
