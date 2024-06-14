@@ -1,0 +1,102 @@
+Every iteration of the interpreter:
+1. Run instruction
+2. Progress PC and simulated time by the associated number of bytes and cycles.
+3. Check if an event should run now.
+   If not, proceed to next iteration.
+4. Handle the event, which depends on what the event was.
+   In particular, Vblank interrupts should let the program run its
+   Vblank handler, then return from the interpreter function.
+   This gives the emulator the opportunity to begin drawing the frame,
+   and prepare input.
+
+=========================================================================
+Interpreter should pause (return to caller) any time the hosted program
+attempts to modify the video output.
+
+Even if no change occurs, the interpreter should also return at the
+start of a vblank period to allow the emulator to sleep for the remainder
+of the 1/60th of a second timeslice used to emulate the system.
+
+=========================================================================
+PPU stats:
+Define: dot, as a unit of time measurement
+
+1 frame on Game Boy (regardless of model) takes 70224 dots to produce.
+This includes OAM scan, drawing, and horizontal blanking period.
+
+1 dot: 1 DMG CPU cycle
+1 dot: 2 CGB double-speed CPU cycles
+Frame rate: ~59.7fps
+
+Durations:
+OAM scan (mode 2): 80 dots, always
+Drawing pixels (mode 3): 127-289 dots
+Horizontal blank (mode 0): 87-204 dots
+Line total: 456 dots
+
+Any time not consumed in mode 3 becomes mode 0 time.
+The 117 cycles that mode 3 can extend can be calculated
+precisely, but not quickly. Emulating precise mode 3/2
+duration is almost certainly not worth the speed hit.
+
+Vertical blank (mode 1): 4560 dots (10 invisible lines)
+
+=========================================================================
+Scheduler contains:
+* Static array of events
+* Pointer to the next event
+
+Each event contains:
+* Pointer to the event following it.
+* Number of cycles before the event occurs AFTER THE OCCURENCE OF THE PREVIOUS EVENT
+  This means:
+  a. The very next event to occur has the number of cycles before occurrence subtracted
+     every time an instruction runs.
+  b. Only when the first event is fired and rescheduled does the counter for the following
+     event begin to have cycles subtracted from it.
+  This keeps the maximum number of cycles before each event fires small
+  and avoids having to subtract the simulated passing of time from EVERY pending event.
+
+Event behavior is identified by index within the list, which never changes.
+Event identification should be ENUMERATED.
+
+Events:
+1. PPU Mode change, which coincides with:
+   * Vblank interrupts
+   * STAT interrupts
+   * LY register value changes
+   * Joypad interrupts, if joypad data is updated once every N frames.
+2. DIV register incrementation (once every 256 cycles)
+3. TIMA register incrementation (once every number of cycles specified by TAC register)
+   Does not run if TIMA is disabled in TAC.
+   Coincides with:
+   * Timer interrupt (when TIMA overflows)
+4. Serial interrupts (multiplayer)
+   An interrupt would be required for the shift of every bit to be 100% accurate.
+   On DMG, serial bits will shift once every 512 cycles.
+   If no external device is connected, and the Game Boy is master of transmission,
+   then FF will be shifted into the serial communication register.
+5. Joypad (IF UPDATE RATE IS HIGHER THAN VERTICAL INTERRUPT RATE)
+6. Interrupt enable
+   After execution of the EI instruction, interrupts are not enabled for another 1 cycle.
+   Therefore, one instruction will run AFTER EI before any interrupts can fire.
+   Actually, make this a CPU state instead.
+
+=========================================================================
+Jump timings
+---
+JR s8
+2 12/8
+---
+JP u16
+3 16/12
+---
+JP HL
+1 4
+---
+RET
+1 20/8, unconditional: 16
+---
+CALL u16
+3 24/12
+

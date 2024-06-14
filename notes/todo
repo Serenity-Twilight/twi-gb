@@ -1,0 +1,3 @@
+- GB_LOG_MAX_LEVEL macro needs to be made OPTIONAL.
+  Honestly, the entire method of restricting log verbosity depending on code location could use a redesign.
+

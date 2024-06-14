@@ -1,0 +1,18 @@
+# ROM files
+*.gb
+
+# Save files
+*.sav
+
+# Logs
+*.log
+
+# Object files
+obj
+
+# Binaries
+dgb
+dgb.old
+joypc
+pak-dump
+

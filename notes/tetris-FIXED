@@ -1,0 +1,25 @@
+Program starts at 0x020C
+sets memory region [D000]-[DFFF] = 00
+L021D: disables interrupts (it starts disabled anyway, so this is a non-op)
+
+VBLANK HANDLER:
+JP $017E
+PUSH all
+if ([$FFCE] != 0) {
+	CALL $21E0
+	L21E0: 
+} else (L01
+
+12328
+
+ERROR:
+Vblank handler is being run when IME==0
+The Vblank handler calls procedures which check against High RAM
+Eventually, the Vblank handler calls a memory location in High RAM.
+This is not initialized by this time, causing garbage data to be executed.
+
+Solution:
+PPU mode event needs to be paused when LCD is off.
+	(though this doesn't seem to be causing this particular problem).
+CPU needs to respect IME and not interrupt when IME==0.
+
