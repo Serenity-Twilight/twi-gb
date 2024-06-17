@@ -7,7 +7,7 @@ Game Boy portable system.
 primarily for my own entertainment and practice as a developer. The intent
 is to *eventually* emulate the Game Boy with total accuracy, but I only
 work on this project when I enjoy doing so. As such, progress will be slow
-and this emulator will is missing many features considered standard and/or
+and this emulator is missing many features considered standard and/or
 essential for casual use. If you just want to play Game Boy games with
 maximum accuracy, search for a different emulator.
 
