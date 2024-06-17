@@ -1,6 +1,6 @@
 #include <assert.h>
 #include <stdint.h>
-#include "gb/mem.h"
+#include "gb/mem/typedef.h"
 #include "gb/pak.h"
 #include "gb/pak/const.h"
 #include "gb/pak/mbc/common.h"

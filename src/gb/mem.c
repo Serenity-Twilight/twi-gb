@@ -2,7 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-#include "gb/core.h"
+#include "gb/core/typedef.h"
 #include "gb/cpu.h"
 #include "gb/log.h"
 #include "gb/mem.h"
@@ -40,6 +40,15 @@ disable_audio(struct gb_core* restrict core);
 
 //=======================================================================
 //-----------------------------------------------------------------------
+// EXTERNAL GLOBAL VARIABLE DEFINITIONS
+//-----------------------------------------------------------------------
+//=======================================================================
+// FIXME: This is a hack to get custom ROM loading available immediately.
+// Replace once the pak loader is ready to integrate.
+const char* gb_mem_rom_filepath = NULL;
+
+//=======================================================================
+//-----------------------------------------------------------------------
 // External function definitions
 //-----------------------------------------------------------------------
 //=======================================================================
@@ -48,13 +57,14 @@ disable_audio(struct gb_core* restrict core);
 // def gb_mem_init()
 uint8_t
 gb_mem_init(struct gb_core* restrict core) {
-	FILE* tetris = fopen("tetris.gb", "rb");
+	assert(gb_mem_rom_filepath != NULL);
+	FILE* tetris = fopen(gb_mem_rom_filepath, "rb");
 	if (tetris == NULL) {
-		fputs("Failed to open tetris.gb.\n", stderr);
+		fprintf(stderr, "Failed to open %s.\n", gb_mem_rom_filepath);
 		return 1;
 	}
 	if (fread(SELF.map, 1, 0x8000 /* 32 KiB */, tetris) != 0x8000) {
-		fputs("Failed to read from tetris file.\n", stderr);
+		fputs("Failed to read from ROM file.\n", stderr);
 		return 1;
 	}
 

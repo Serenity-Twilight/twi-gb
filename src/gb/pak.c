@@ -8,8 +8,6 @@
 #include <string.h>
 #define GB_LOG_MAX_LEVEL LVL_TRC
 #include "gb/log.h"
-#include "gb/mem.h"
-#include "gb/mem/region.h"
 #include "gb/pak.h"
 #include "gb/pak/header.h"
 #include "gb/pak/typedef.h"

@@ -1,8 +1,7 @@
 #ifndef GB_MEM_H
 #define GB_MEM_H
 #include <stdint.h>
-#include "gb/core/decl.h"
-#include "gb/pak/typedef.h"
+#include "gb/core.h"
 #include "gb/ppu.h"
 
 // TODO: Structure containing bank-swappable memory + metadata.
@@ -15,16 +14,20 @@
 
 //=======================================================================
 //-----------------------------------------------------------------------
-// External type definitions
+// EXTERNAL TYPE DECLARATIONS
+// (defined in gb/mem/typedef.h)
 //-----------------------------------------------------------------------
 //=======================================================================
-struct gb_mem {
-	struct gb_pak* pak;
-	uint8_t map[0x10000]; // 64 KiB
-	uint8_t stat_int;
-	uint8_t ime;
-	uint8_t pad;
-};
+struct gb_mem;
+
+//=======================================================================
+//-----------------------------------------------------------------------
+// EXTERNAL GLOBAL VARIABLE DECLARATIONS
+//-----------------------------------------------------------------------
+//=======================================================================
+// FIXME: This is a hack to get custom ROM loading available immediately.
+// Replace once the pak loader is ready to integrate.
+extern const char* gb_mem_rom_filepath;
 
 //=======================================================================
 //-----------------------------------------------------------------------

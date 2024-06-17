@@ -1,10 +1,10 @@
 #include <inttypes.h>
 #include <stdint.h>
-#include "gb/core.h"
+#include "gb/core/typedef.h"
 #include "gb/cpu.h"
 #include "gb/cpu/reg.h"
+#define GB_LOG_MAX_LEVEL LVL_TRC
 #include "gb/log.h"
-#include "gb/mem.h"
 
 //=======================================================================
 // def gb_cpu_init()

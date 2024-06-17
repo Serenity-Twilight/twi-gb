@@ -1,8 +1,10 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <stdio.h>
-#include "gb/core.h"
+#include "gb/core/typedef.h"
+#include "gb/mem.h"
 #include "gb/mem/io.h"
+#define GB_LOG_MAX_LEVEL LVL_TRC
 #include "gb/log.h"
 #include "gb/sch.h"
 

@@ -1,4 +1,5 @@
 #include <SDL.h>
+#define GB_LOG_MAX_LEVEL LVL_TRC
 #include "gb/log.h"
 #include "gb/video/sdl.h"
 

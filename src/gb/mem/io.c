@@ -1,10 +1,10 @@
 #include <inttypes.h>
 #include <stdint.h>
-#include "gb/core.h"
+#include "gb/core/typedef.h"
 #include "gb/cpu.h"
 #include "gb/log.h"
-#include "gb/mem.h"
 #include "gb/mem/io.h"
+#include "gb/mem/typedef.h"
 #include "gb/pad.h"
 
 #define GB_LOG_MAX_LEVEL LVL_DBG

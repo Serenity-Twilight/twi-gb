@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "gb/core.h"
+#include "gb/core/typedef.h"
 #include "gb/cpu.h"
 #include "gb/cpu/opc.h"
 #include "gb/cpu/opc/decoder/oper.h"
