@@ -33,6 +33,6 @@ int main(int argc, char* argv[]) {
 
 static void
 print_usage(const char* restrict program_name) {
-	printf("Usage:\n\t%s <ROM-filepath>\n");
+	printf("Usage:\n\t%s <ROM-filepath>\n", program_name);
 } // end print_usage()
 
