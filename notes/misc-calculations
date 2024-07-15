@@ -36,7 +36,7 @@ Line total: 456 dots
 
 Any time not consumed in mode 3 becomes mode 0 time.
 The 117 cycles that mode 3 can extend can be calculated
-precisely, but not quickly. Emulating precise mode 3/2
+precisely, but not quickly. Emulating precise mode 3/0
 duration is almost certainly not worth the speed hit.
 
 Vertical blank (mode 1): 4560 dots (10 invisible lines)
@@ -44,46 +44,69 @@ Vertical blank (mode 1): 4560 dots (10 invisible lines)
 =========================================================================
 Scheduler contains:
 * Static array of events
-* Pointer to the next event
+* Pointer to the next (first) event
 
 Each event contains:
 * Pointer to the event following it.
 * Number of cycles before the event occurs AFTER THE OCCURENCE OF THE PREVIOUS EVENT
-  This means:
-  a. The very next event to occur has the number of cycles before occurrence subtracted
-     every time an instruction runs.
-  b. Only when the first event is fired and rescheduled does the counter for the following
-     event begin to have cycles subtracted from it.
-  This keeps the maximum number of cycles before each event fires small
-  and avoids having to subtract the simulated passing of time from EVERY pending event.
+	This means:
+	a. The very next event to occur has the number of cycles before
+	   occurrence subtracted every time an instruction runs.
+	b. Only when the first event is fired and rescheduled does the
+	   counter for the following event begin to have cycles subtracted
+	   from it.
+	This keeps the maximum number of cycles before each event fires small
+	and avoids having to subtract the simulated passing of time from EVERY
+	pending event.
 
 Event behavior is identified by index within the list, which never changes.
 Event identification should be ENUMERATED.
 
 Events:
 1. PPU Mode change, which coincides with:
-   * Vblank interrupts
+   * Vblank interrupts]
    * STAT interrupts
-   * LY register value changes
+   * LY register value changes + interrupts
    * Joypad interrupts, if joypad data is updated once every N frames.
 2. DIV register incrementation (once every 256 cycles)
-3. TIMA register incrementation (once every number of cycles specified by TAC register)
+3. TIMA register incrementation (once every number of cycles specified
+   by TAC register)
    Does not run if TIMA is disabled in TAC.
    Coincides with:
    * Timer interrupt (when TIMA overflows)
 4. Serial interrupts (multiplayer)
-   An interrupt would be required for the shift of every bit to be 100% accurate.
+   An interrupt would be required for the shift of every bit to be
+   100% accurate.
    On DMG, serial bits will shift once every 512 cycles.
-   If no external device is connected, and the Game Boy is master of transmission,
-   then FF will be shifted into the serial communication register.
+   If no external device is connected, and the Game Boy is master
+   of transmission, then 0xFF will be shifted into the serial
+   communication register.
 5. Joypad (IF UPDATE RATE IS HIGHER THAN VERTICAL INTERRUPT RATE)
 6. Interrupt enable
-   After execution of the EI instruction, interrupts are not enabled for another 1 cycle.
-   Therefore, one instruction will run AFTER EI before any interrupts can fire.
+   After execution of the EI instruction, interrupts are not enabled
+   for another 1 cycle. Therefore, one instruction will run AFTER
+   EI before any interrupts can fire.
    Actually, make this a CPU state instead.
 
 =========================================================================
 Jump timings
+* First value == number of bytes for instruction
+* Second value == number of cycles for instruction
+  If value is split by forward slash, then the jump is conditional.
+  The left-hand side of the slash is the number of cycles if
+  the jump is taken, and the right-hand side is the number of cycles
+  if the jump is NOT taken.
+EXAMPLE 1:
+SOME UNCONDITIONAL JUMP
+3 12
+(3 bytes for instruction, 12 cycles to execute)
+
+EXAMPLE 2:
+SOME CONDITIONAL JUMP
+3 12/8
+(3 bytes for instruction, 12 cycles to execute if taken, 8 cycles
+ to execute if NOT taken).
+
 ---
 JR s8
 2 12/8
