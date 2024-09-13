@@ -23,6 +23,7 @@ struct gb_pak {
 	unsigned int battery : 1;
 	// State flags:
 	unsigned int dirty_ram : 1;
+	unsigned int ram_enabled : 1;
 }; // end struct gb_pak
 
 #endif // GB_PAK_TYPE_H
