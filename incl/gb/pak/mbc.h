@@ -4,7 +4,20 @@
 //
 // The primary header for MBC (Memory Bank Controller) emulation.
 //
+// All versions of the Game Boy utilize a 64 KiB memory map addressable
+// by 16-bit values. Of these 64 KiB, 32 KiB is allocated to the ROM
+// and 8 KiB is allocated to the pak's external RAM. For games with
+// larger ROM/RAM requirements than this, MBCs exist.
 //
+// MBCs, or Memory Bank Controllers, are devices included in most
+// Game Boy paks that allow for swapping out active "banks" of ROM/RAM.
+// When a bank is swapped in and becomes active, its contents are mapped
+// into the Game Boy's memory map and become accessible. Therefore,
+// games with larger ROM images or external RAM capacity can be run
+// by swapping out banks at runtime.
+//
+// More information available from the PanDocs at:
+// https://gbdev.io/pandocs/MBCs.html
 //-----------------------------------------------------------------------
 //=======================================================================
 #ifndef GB_PAK_MBC_H
