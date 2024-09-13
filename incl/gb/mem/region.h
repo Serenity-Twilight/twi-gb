@@ -49,5 +49,5 @@ enum gb_mem_region {
 	MEM_SZ_HRAM = MEM_E_HRAM - MEM_B_HRAM,
 }; // end enum gb_mem_region
 
-#endif // GMEM_B_MEM_REGION_H
+#endif // GB_MEM_REGION_H
 
