@@ -8,6 +8,7 @@
 #include <string.h>
 #define GB_LOG_MAX_LEVEL LVL_TRC
 #include "gb/log.h"
+#include "gb/mem/region.h"
 #include "gb/pak.h"
 #include "gb/pak/header.h"
 #include "gb/pak/typedef.h"
@@ -133,7 +134,7 @@ gb_pak_create(const char* restrict pak_id) {
 	//       For saves, just append .sav
 	size_t pak_id_len = strlen(pak_id);
 	size_t savepath_len = pak_id_len + 5; // ".sav" + NUL = 5
-	char* save_fp = malloc(savepath_len); // ".sav" + NUL = 5
+	char* save_fp = malloc(savepath_len);
 	if (save_fp == NULL) {
 		LOGF("Unable to allocate %zu bytes for save filepath.", savepath_len);
 		return NULL;
@@ -154,7 +155,7 @@ gb_pak_delete(struct gb_pak* restrict pak) {
 		return;
 
 	if (pak->battery)
-		LOGW("Saving on pak object deletion not-yet-implemented.");
+		LOGW("Saving on pak object deletion not yet implemented.");
 	free(pak);
 } // end gb_pak_delete()
 
@@ -163,13 +164,28 @@ gb_pak_delete(struct gb_pak* restrict pak) {
 void
 gb_pak_insert(
 		struct gb_pak* restrict pak,
-		uint8_t* restrict rom_map,
-		uint8_t* restrict ram_map) {
+		uint8_t* restrict rom_map_dst,
+		uint8_t* restrict ram_map_dst) {
 	assert(pak != NULL);
-	assert(rom_map != NULL);
-	assert(ram_map != NULL);
+	assert(pak->rom != NULL);
+	assert(pak->rom_bank_curr < pak->rom_bank_count);
+	assert(pak->rom_bank_count >= 2);
+	assert(rom_map_dst != NULL);
+	assert(ram_map_dst != NULL);
 
-
+	// Load static ROM bank to map:
+	memcpy(rom_map_dst, pak->rom, MEM_SZ_ROM1);
+	// Load dynamic ROM bank to map:
+	memcpy(rom_map_dst + MEM_SZ_ROM1, pak->rom + MEM_SZ_ROM1, MEM_SZ_ROM2);
+	pak->rom_bank_curr = 1;
+	// Load external RAM bank to map:
+	if (pak->ram != NULL) {
+		memcpy(ram_map_dst, pak->ram, MEM_SZ_SRAM);
+		pak->ram_bank_curr = 0;
+	} else {
+		// No SRAM in this pak. Fill SRAM mapping with 0xFF (indicates read error):
+		memset(ram_map_dst, 0xFF, MEM_SZ_SRAM);
+	}
 } // end gb_pak_insert()
 
 //=======================================================================
@@ -401,7 +417,7 @@ init_pak(
 	pak->battery = ainfo->battery;
 	// Pak state fields:
 	pak->rom_bank_curr = pak->ram_bank_curr = 0;
-	pak->dirty_ram = 0;
+	pak->dirty_ram = pak->ram_enabled = 0;
 
 	return 0; // success
 } // end init_pak()
