@@ -57,16 +57,16 @@ const char* gb_mem_rom_filepath = NULL;
 // def gb_mem_init()
 uint8_t
 gb_mem_init(struct gb_core* restrict core) {
-	assert(gb_mem_rom_filepath != NULL);
-	FILE* tetris = fopen(gb_mem_rom_filepath, "rb");
-	if (tetris == NULL) {
-		fprintf(stderr, "Failed to open %s.\n", gb_mem_rom_filepath);
-		return 1;
-	}
-	if (fread(SELF.map, 1, 0x8000 /* 32 KiB */, tetris) != 0x8000) {
-		fputs("Failed to read from ROM file.\n", stderr);
-		return 1;
-	}
+//	assert(gb_mem_rom_filepath != NULL);
+//	FILE* tetris = fopen(gb_mem_rom_filepath, "rb");
+//	if (tetris == NULL) {
+//		fprintf(stderr, "Failed to open %s.\n", gb_mem_rom_filepath);
+//		return 1;
+//	}
+//	if (fread(SELF.map, 1, 0x8000, tetris) != 0x8000) {
+//		fputs("Failed to read from ROM file.\n", stderr);
+//		return 1;
+//	}
 
 	// Unmapped memory.
 	SELF.stat_int = 0;
@@ -75,6 +75,8 @@ gb_mem_init(struct gb_core* restrict core) {
 	SELF.pak = NULL;
 	SELF.pad = 0xFF; // Nothing pressed
 
+	// Initialize hardware registers to values
+	// observed on real DMG hardware:
 #define IO(reg) (SELF.map[IO_##reg])
 	IO(JOYP) = 0xCF;
 	IO(SB)   = 0x00;
@@ -176,8 +178,7 @@ gb_mem_u8write(
 
 //=======================================================================
 // TODO:
-// * SC (not first revision)
-// * Add input support.
+// * SC (serial transfer control, required for link cable support)
 // * Refuse writes to APU registers (other than NR52) when APU is off.
 // * APU initial length timers are write-only, meaning that they will
 //   not reflect written values when read. Length timer information
@@ -350,9 +351,25 @@ gb_mem_copy_ppu_state(
 	LOGT("returning");
 } // end gb_mem_copy_ppu_state()
 
+//=======================================================================
+// def gb_mem_swap_pak()
+void
+gb_mem_swap_pak(
+		struct gb_core* restrict core,
+		struct gb_pak* restrict pak) {
+	if (SELF.pak == pak)
+		return; // Swap for self does nothing.
+	SELF.pak = pak;
+	if (SELF.pak == NULL)
+		return; // Emulated pak slot is now empty.
+	gb_pak_reset_state(SELF.pak);
+} // end gb_mem_swap_pak()
+
+//=======================================================================
+// def gb_mem_set_pad()
 void
 gb_mem_set_pad(struct gb_core* restrict core, uint8_t gb_pad) {
-	core->mem.pad = gb_pad;
+	SELF.pad = gb_pad;
 	gb_mem_io_update_joyp(core, gb_pad);
 } // end gb_mem_set_pad()
 
@@ -406,6 +423,8 @@ echo_ram_write(
 } // end echo_ram_write()
 
 //=======================================================================
+// doc disable_audio()
+// TODO
 //=======================================================================
 // def disable_audio()
 static void

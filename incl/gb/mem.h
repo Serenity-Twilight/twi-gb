@@ -18,6 +18,7 @@
 // (defined in gb/mem/typedef.h)
 //-----------------------------------------------------------------------
 //=======================================================================
+// decl struct gb_mem
 struct gb_mem;
 
 //=======================================================================
@@ -67,6 +68,8 @@ gb_mem_copy_ppu_state(
 		struct gb_ppu_state* restrict dst);
 void
 gb_mem_set_pad(struct gb_core* restrict core, uint8_t gb_pad);
+void
+gb_mem_swap_pak(struct gb_core* restrict core, struct gb_pak* restrict pak);
 
 #endif // GB_MEM_H
 
