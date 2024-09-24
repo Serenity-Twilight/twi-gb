@@ -11,6 +11,7 @@
 #include "gb/mbc.h"
 #include "gb/mem/region.h"
 #include "gb/pak.h"
+#include "gb/pak/const.h"
 #include "gb/pak/header.h"
 #include "gb/pak/typedef.h"
 #define PRX_TRUNCATE_PREFIX 1
@@ -190,35 +191,42 @@ gb_pak_insert(
 } // end gb_pak_insert()
 
 //=======================================================================
-// def gb_pak_write()
+// def gb_pak_write8_rom()
 void
-gb_pak_write8(struct gb_pak* restrict pak,
-		uint8_t* restrict memory_map,
+gb_pak_write8_rom(struct gb_pak* restrict pak,
+		uint8_t* restrict rom_map,
 		uint16_t addr, uint8_t val) {
 	assert(pak != NULL);
 	assert(pak->mbc_id != PAKMBC_UNKNOWN);
 	assert(pak->mbc_id < PAKMBC_COUNT);
-	// Writes outside of ROM and external RAM ranges are not the
-	// responsbility of the pak, and are thus invalid:
-	assert(addr < MEM_E_ROM2 || (addr >= MEM_B_SRAM && addr < MEM_E_SRAM));
+	assert(addr < PAK_ROM_BANK_SIZE);
 
 	// Enumerate MBC-specific ROM-write handlers:
 	static const mbc_write8_proc mbc_write8_rom[] = {
 		mbc_write8_rom_none
 	};
+	// Pass to MBC-specific ROM-write handler:
+	mbc_write8_rom[pak->mbc_id](pak, memory_map, addr, val);
+} // end gb_pak_write8_rom()
+
+//=======================================================================
+// def gb_pak_write8_ram()
+void
+gb_pak_write8_ram(struct gb_pak* restrict pak,
+		uint8_t* restrict ram_map,
+		uint16_t addr, uint8_t val) {
+	assert(pak != NULL);
+	assert(pak->mbc_id != PAKMBC_UNKNOWN);
+	assert(pak->mbc_id < PAKMBC_COUNT);
+	assert(addr < PAK_RAM_BANK_SIZE);
+
 	// Enumerate MBC-specific RAM-write handlers:
 	static const mbc_write8_proc mbc_write8_ram[] = {
 		mbc_write8_ram_none
 	};
-
-	if (addr < MEM_E_ROM2) {
-		// Pass to MBC-specific ROM-write handler:
-		mbc_write8_rom[pak->mbc_id](pak, memory_map + MEM_B_ROM1, addr - MEM_B_ROM1, val);
-	} else {
-		// Pass to MBC-specific RAM-write handler:
-		mbc_write8_ram[pak->mbc_id](pak, memory_map + MEM_B_SRAM, addr - MEM_B_SRAM, val);
-	}
-} // end gb_pak_write8()
+	// Pass to MBC-specific RAM-write handler:
+	mbc_write8_ram[pak->mbc_id](pak, memory_map, addr, val);
+} // end gb_pak_write8_ram()
 
 //=======================================================================
 //-----------------------------------------------------------------------
