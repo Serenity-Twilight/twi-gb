@@ -33,10 +33,20 @@ struct pakhdr_alloc_info {
 // EXTERNAL FUNCTION DECLARATIONS
 //-----------------------------------------------------------------------
 //=======================================================================
+
+//=======================================================================
+// doc pakhdr_get_alloc_info()
+// TODO
+//=======================================================================
 int
 pakhdr_get_alloc_info(
 		struct pakhdr_alloc_info* restrict dst,
 		FILE* restrict rom_file);
+
+//=======================================================================
+// doc pakhdr_dump()
+// TODO
+//=======================================================================
 size_t
 pakhdr_dump(char* restrict buf, size_t bufsz,
 		const void* restrict rom,
