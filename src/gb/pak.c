@@ -191,25 +191,6 @@ gb_pak_insert(
 } // end gb_pak_insert()
 
 //=======================================================================
-// def gb_pak_write8_rom()
-void
-gb_pak_write8_rom(struct gb_pak* restrict pak,
-		uint8_t* restrict rom_map,
-		uint16_t addr, uint8_t val) {
-	assert(pak != NULL);
-	assert(pak->mbc_id != PAKMBC_UNKNOWN);
-	assert(pak->mbc_id < PAKMBC_COUNT);
-	assert(addr < PAK_ROM_BANK_SIZE);
-
-	// Enumerate MBC-specific ROM-write handlers:
-	static const mbc_write8_proc mbc_write8_rom[] = {
-		mbc_write8_rom_none
-	};
-	// Pass to MBC-specific ROM-write handler:
-	mbc_write8_rom[pak->mbc_id](pak, memory_map, addr, val);
-} // end gb_pak_write8_rom()
-
-//=======================================================================
 // def gb_pak_write8_ram()
 void
 gb_pak_write8_ram(struct gb_pak* restrict pak,
@@ -218,6 +199,7 @@ gb_pak_write8_ram(struct gb_pak* restrict pak,
 	assert(pak != NULL);
 	assert(pak->mbc_id != PAKMBC_UNKNOWN);
 	assert(pak->mbc_id < PAKMBC_COUNT);
+	assert(ram_map != NULL);
 	assert(addr < PAK_RAM_BANK_SIZE);
 
 	// Enumerate MBC-specific RAM-write handlers:
@@ -225,8 +207,28 @@ gb_pak_write8_ram(struct gb_pak* restrict pak,
 		mbc_write8_ram_none
 	};
 	// Pass to MBC-specific RAM-write handler:
-	mbc_write8_ram[pak->mbc_id](pak, memory_map, addr, val);
+	mbc_write8_ram[pak->mbc_id](pak, ram_map, addr, val);
 } // end gb_pak_write8_ram()
+
+//=======================================================================
+// def gb_pak_write8_rom()
+void
+gb_pak_write8_rom(struct gb_pak* restrict pak,
+		uint8_t* restrict rom_map,
+		uint16_t addr, uint8_t val) {
+	assert(pak != NULL);
+	assert(pak->mbc_id != PAKMBC_UNKNOWN);
+	assert(pak->mbc_id < PAKMBC_COUNT);
+	assert(rom_map != NULL);
+	assert(addr < PAK_ROM_BANK_SIZE);
+
+	// Enumerate MBC-specific ROM-write handlers:
+	static const mbc_write8_proc mbc_write8_rom[] = {
+		mbc_write8_rom_none
+	};
+	// Pass to MBC-specific ROM-write handler:
+	mbc_write8_rom[pak->mbc_id](pak, rom_map, addr, val);
+} // end gb_pak_write8_rom()
 
 //=======================================================================
 //-----------------------------------------------------------------------
