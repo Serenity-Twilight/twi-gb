@@ -1,6 +1,6 @@
 //=======================================================================
 //-----------------------------------------------------------------------
-// incl/gb/pak.h
+// incl/gb/mbc.h
 //
 // The primary header for MBC (Memory Bank Controller) emulation.
 //
@@ -25,6 +25,10 @@
 #include <stdint.h>
 #include "gb/mem.h"
 #include "gb/pak.h"
+//---------------------------
+// MBC handler declarations:
+#include "gb/pak/mbc/none.h"
+//---------------------------
 
 //=======================================================================
 // doc enum mbc_ids
@@ -81,24 +85,6 @@ typedef void (*mbc_write8_proc)(
 		struct gb_pak* restrict pak,
 		uint8_t* restrict map,
 		uint16_t addr, uint8_t val);
-
-//=======================================================================
-// doc struct mbc_write8_pair
-// doc mbc_write8[]
-//
-// Array of ROM+RAM write functions.
-// Each object in the array represents the write functions of its
-// index's respective `mbc_id`.
-//
-// For example:
-// `mbc_write8[PAKMBC_NONE]` contains the write functions for paks
-// which possess no MBC.
-//=======================================================================
-// def struct mbc_write8_pair
-extern const struct mbc_write8_pair {
-	mbc_write8_proc rom;
-	mbc_write8_proc ram;
-} mbc_write8[];
 
 #endif // GB_PAK_MBC_H
 
