@@ -12,13 +12,12 @@ mbc_ram_write(
 		uint8_t* restrict ram_map,
 		uint16_t addr, uint8_t val) {
 	assert(pak != NULL);
-	assert(addr >= MEM_B_SRAM && addr < MEM_E_SRAM);
+	assert(addr < MEM_SZ_SRAM);
 
 	if (pak->ram_bank_count > 0) {
 		assert(pak->ram != NULL);
 		assert(pak->ram_bank_curr < pak->ram_bank_count);
 		if (pak->ram_enabled) {
-			addr -= MEM_B_SRAM;
 			// Update copy of RAM owned by memory map:
 			ram_map[addr] = val;
 			// Update RAM owned by pak:
@@ -33,18 +32,20 @@ mbc_ram_write(
 void
 mbc_swap_rom_bank(
 		const struct gb_pak* restrict pak,
-		uint8_t* restrict mapping_dst,
+		uint8_t* restrict rom_map,
 		uint16_t new_bank_id) {
 	assert(pak != NULL);
 	assert(pak->rom != NULL);
 	assert(pak->rom_bank_count >= 2);
-	assert(mapping_dst != NULL);
+	assert(rom_map != NULL);
 
 	// Truncate values that are greater than the total number of banks:
 	new_bank_id %= pak->rom_bank_count;
 	if (new_bank_id == pak->rom_bank_curr)
 		return; // New bank == old bank, do nothing
-	memcpy(mapping_dst, pak->rom + new_bank_id * MEM_SZ_ROM2, MEM_SZ_ROM2);
+	memcpy(rom_map + MEM_B_ROM2,
+			pak->rom + new_bank_id * PAK_ROM_BANK_SIZE,
+			PAK_ROM_BANK_SIZE);
 	pak->rom_bank_curr = new_bank_id;
 } // end mbc_swap_rom_bank()
 
@@ -53,18 +54,18 @@ mbc_swap_rom_bank(
 void
 mbc_swap_ram_bank(
 		const struct gb_pak* restrict pak,
-		uint8_t* restrict mapping_dst,
+		uint8_t* restrict ram_map,
 		uint8_t new_bank_id) {
 	assert(pak != NULL);
-	assert(mapping_dst != NULL);
+	assert(ram_map != NULL);
 
 	if (pak->ram != NULL) {
 		assert(pak->ram_bank_count > 0);
 		// Truncate values that are greater than the total number of banks:
-		new_bank_id &= pak->ram_bank_count;
+		new_bank_id %= pak->ram_bank_count;
 		if (new_bank_id == pak->ram_bank_curr)
 			return; // New bank == old bank, do nothing
-		memcpy(mapping_dst, pak->ram + new_bank_id * MEM_SZ_SRAM, MEM_SZ_SRAM);
+		memcpy(ram_map, pak->ram + new_bank_id * PAK_RAM_BANK_SIZE, PAK_RAM_BANK_SIZE);
 		pak->ram_bank_curr = new_bank_id;
 	} // else no external RAM is present, do nothing
 } // end mbc_swap_ram_bank()
