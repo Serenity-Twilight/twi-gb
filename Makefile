@@ -8,10 +8,18 @@ define GB_SRC_FILES =
 	gb/mem.c
 	gb/mem/io.c
 	gb/pad.c
+	gb/pak.c
+	gb/pak/header.c
+	gb/pak/mbc.c
+	gb/pak/mbc/common.c
+	gb/pak/mbc/none.c
 	gb/ppu.c
 	gb/ppu/shared.c
 	gb/sch.c
 	gb/video/sdl.c
+	prx/incbuf.c
+	prx/io.c
+	prx/timespec.c
 endef
 
 define PAK_LOADER_SRC_FILES =
