@@ -8,9 +8,9 @@
 // def mbc_write8_rom_none()
 void
 mbc_write8_rom_none(
-		struct gb_pak* restrict,
-		uint8_t* restrict,
-		uint16_t, uint8_t) {
+		struct gb_pak* restrict pak,
+		uint8_t* restrict rom_map,
+		uint16_t addr, uint8_t val) {
 	(void)0; // No MBC. Writes do nothing to the ROM.
 } // end mbc_write8_rom_none()
 
@@ -23,6 +23,6 @@ mbc_write8_ram_none(
 		uint16_t addr, uint8_t val) {
 	assert(pak != NULL);
 	assert(pak->ram_bank_count <= 1);
-	mbc_sram_write(mem, pak, addr, val);
+	mbc_sram_write(pak, ram_map, addr, val);
 } // end mbc_write8_ram_none()
 
