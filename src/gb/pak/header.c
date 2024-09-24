@@ -108,7 +108,7 @@ pakhdr_get_alloc_info(
 } // end pakhdr_get_alloc_info()
 
 //=======================================================================
-// def pakhdr_log_dump()
+// def pakhdr_dump()
 size_t
 pakhdr_dump(char* restrict buf, size_t bufsz,
 		const void* restrict rom,
@@ -321,6 +321,8 @@ dump_logo_check(struct incbuf* restrict ibuf, const void* restrict rom) {
 } // end dump_logo_check()
 
 //=======================================================================
+// doc dump_title()
+//=======================================================================
 // def dump_title()
 static void
 dump_title(struct incbuf* restrict ibuf, const void* restrict rom) {
@@ -356,6 +358,39 @@ dump_title(struct incbuf* restrict ibuf, const void* restrict rom) {
 	} // end ifelse (title is v2)
 } // end dump_title()
 
+//=======================================================================
+// doc fread_alloc_info()
+//
+// Reads the header of the pak contained within the open file `rom_file`
+// and populates the following members of the `pakhdr_alloc_info` object
+// pointed to by `dst` with data from the header:
+// * pak_type_code
+// * rom_size_code
+// * ram_size_code
+//
+// Behavior if undefined if any of the following are true:
+// * `dst` points to NULL
+// * `rom_file` does not point to an open FILE object.
+//-----------------------------------------------------------------------
+// Parameters:
+// * dst:
+//   Pointer to a `pakhdr_alloc_info` object.
+//   Destination for header data read from `rom_file`.
+// * rom_file:
+//   Pointer to an open FILE containing at least the header data for
+//   a Game Boy pak at expected offsets (defined by enum pakhdr_addr).
+//
+// Returns:
+// 0 - On successful read of `rom_file` and population of `dst`.
+//     * `rom_file`'s read pointer will have been altered.
+// 1 - `fseek()` operation failed on `rom_file`.
+//     * `dst` unchanged.
+//     * `rom_file` not altered beyond attempted use of `fseek()`.
+// 2 - `fgetc()` operation failed on `rom_file`.
+//     * State of `dst->pak_type_code`, `dst->rom_size_code`, and
+//       `dst->ram_size_code` undefined.
+//     * `rom_file`'s read pointer will have been altered, and
+//       error flags set associated with failed `fgetc()` usage.
 //=======================================================================
 // def fread_alloc_info()
 static int
@@ -395,6 +430,9 @@ fread_alloc_info(
 	return 0; // Success
 } // end fread_alloc_info()
 
+//=======================================================================
+// doc new_licensee_string()
+// TODO
 //=======================================================================
 // def new_licensee_string()
 static const char*
