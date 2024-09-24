@@ -8,6 +8,7 @@
 #include <string.h>
 #define GB_LOG_MAX_LEVEL LVL_TRC
 #include "gb/log.h"
+#include "gb/mbc.h"
 #include "gb/mem/region.h"
 #include "gb/pak.h"
 #include "gb/pak/header.h"
@@ -164,29 +165,60 @@ gb_pak_delete(struct gb_pak* restrict pak) {
 void
 gb_pak_insert(
 		struct gb_pak* restrict pak,
-		uint8_t* restrict rom_map_dst,
-		uint8_t* restrict ram_map_dst) {
+		uint8_t* restrict rom_map,
+		uint8_t* restrict ram_map) {
 	assert(pak != NULL);
 	assert(pak->rom != NULL);
 	assert(pak->rom_bank_curr < pak->rom_bank_count);
 	assert(pak->rom_bank_count >= 2);
-	assert(rom_map_dst != NULL);
-	assert(ram_map_dst != NULL);
+	assert(rom_map != NULL);
+	assert(ram_map != NULL);
 
 	// Load static ROM bank to map:
-	memcpy(rom_map_dst, pak->rom, MEM_SZ_ROM1);
+	memcpy(rom_map, pak->rom, MEM_SZ_ROM1);
 	// Load dynamic ROM bank to map:
-	memcpy(rom_map_dst + MEM_SZ_ROM1, pak->rom + MEM_SZ_ROM1, MEM_SZ_ROM2);
+	memcpy(rom_map + MEM_SZ_ROM1, pak->rom + MEM_SZ_ROM1, MEM_SZ_ROM2);
 	pak->rom_bank_curr = 1;
 	// Load external RAM bank to map:
 	if (pak->ram != NULL) {
-		memcpy(ram_map_dst, pak->ram, MEM_SZ_SRAM);
+		memcpy(ram_map, pak->ram, MEM_SZ_SRAM);
 		pak->ram_bank_curr = 0;
 	} else {
 		// No SRAM in this pak. Fill SRAM mapping with 0xFF (indicates read error):
-		memset(ram_map_dst, 0xFF, MEM_SZ_SRAM);
+		memset(ram_map, 0xFF, MEM_SZ_SRAM);
 	}
 } // end gb_pak_insert()
+
+//=======================================================================
+// def gb_pak_write()
+void
+gb_pak_write8(struct gb_pak* restrict pak,
+		uint8_t* restrict memory_map,
+		uint16_t addr, uint8_t val) {
+	assert(pak != NULL);
+	assert(pak->mbc_id != PAKMBC_UNKNOWN);
+	assert(pak->mbc_id < PAKMBC_COUNT);
+	// Writes outside of ROM and external RAM ranges are not the
+	// responsbility of the pak, and are thus invalid:
+	assert(addr < MEM_E_ROM2 || (addr >= MEM_B_SRAM && addr < MEM_E_SRAM));
+
+	// Enumerate MBC-specific ROM-write handlers:
+	static const mbc_write8_proc mbc_write8_rom[] = {
+		mbc_write8_rom_none
+	};
+	// Enumerate MBC-specific RAM-write handlers:
+	static const mbc_write8_proc mbc_write8_ram[] = {
+		mbc_write8_ram_none
+	};
+
+	if (addr < MEM_E_ROM2) {
+		// Pass to MBC-specific ROM-write handler:
+		mbc_write8_rom[pak->mbc_id](pak, memory_map + MEM_B_ROM1, addr - MEM_B_ROM1, val);
+	} else {
+		// Pass to MBC-specific RAM-write handler:
+		mbc_write8_ram[pak->mbc_id](pak, memory_map + MEM_B_SRAM, addr - MEM_B_SRAM, val);
+	}
+} // end gb_pak_write8()
 
 //=======================================================================
 //-----------------------------------------------------------------------
