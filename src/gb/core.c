@@ -13,6 +13,8 @@
 #include "gb/pad.h"
 #include "gb/ppu.h"
 #include "gb/sch.h"
+#define PRX_TRUNCATE_PREFIX 1
+#include "prx/timespec.h"
 
 #undef GB_LOG_MAX_LEVEL
 #define GB_LOG_MAX_LEVEL LVL_INF
@@ -43,21 +45,12 @@ struct input_state {
 // INTERNAL FUNCTION DECLARATIONS
 //-----------------------------------------------------------------------
 //=======================================================================
-static inline void
-add_timespec_nsec(struct timespec* restrict dst, int32_t nsec);
-static inline long long
-cmp_timespec(struct timespec* restrict lhs, struct timespec* restrict rhs);
 static int
 handle_event(SDL_Event* restrict event, struct input_state* restrict state);
 static void
 handle_keydown(const SDL_KeyboardEvent* restrict kevent, struct input_state* restrict input);
 static void
 handle_keyup(const SDL_KeyboardEvent* restrict kevent, struct input_state* restrict input);
-static inline void
-sub_timespec(
-		struct timespec* restrict dst,
-		const struct timespec* restrict lhs,
-		const struct timespec* restrict rhs);
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -116,7 +109,7 @@ gb_core_run(
 
 		// Add total frame time to the start time of this frame to get
 		// the start time of the next frame.
-		add_timespec_nsec(&next_frame_start_time, NSEC_PER_FRAME);
+		timespec_add_nsec(&next_frame_start_time, NSEC_PER_FRAME);
 		// Calculate time between now and when
 		// the next frame should execute:
 		struct timespec now;
@@ -125,11 +118,11 @@ gb_core_run(
 			return;
 		}
 		
-		if (!input.fast_forward && cmp_timespec(&next_frame_start_time, &now) >= 0) {
+		if (!input.fast_forward && timespec_cmp(&next_frame_start_time, &now) >= 0) {
 			// Normal (frame-capped) speed, and ahead of or on schedule.
 			// Sleep until the next frame:
 			struct timespec sleep_duration;
-			sub_timespec(&sleep_duration, &next_frame_start_time, &now);
+			timespec_sub(&sleep_duration, &next_frame_start_time, &now);
 			LOGT("Sleeping for {.sec=%lld,.nsec=%lld}",
 					sleep_duration.tv_sec, sleep_duration.tv_nsec);
 			int sleep_result;
@@ -162,34 +155,6 @@ gb_core_set_pad(struct gb_core* restrict core, uint8_t gb_pad) {
 // INTERNAL FUNCTION DEFINITIONS
 //-----------------------------------------------------------------------
 //=======================================================================
-
-//=======================================================================
-// doc add_timespec_nsec()
-// TODO
-//=======================================================================
-// def add_timespec_nsec()
-static inline void
-add_timespec_nsec(struct timespec* restrict dst, int32_t nsec) {
-	dst->tv_nsec += nsec;
-	if (dst->tv_nsec >= 1000000000) {
-		// Perform arithmetic carry:
-		dst->tv_sec += 1;
-		dst->tv_nsec -= 1000000000;
-	}
-}
-
-//=======================================================================
-// doc cmp_timespec()
-// TODO
-//=======================================================================
-// def cmp_timespec()
-static inline long long
-cmp_timespec(struct timespec* restrict lhs, struct timespec* restrict rhs) {
-	long long sec_diff = lhs->tv_sec - rhs->tv_sec;
-	if (sec_diff != 0)
-		return sec_diff;
-	return lhs->tv_nsec - rhs->tv_nsec;
-} // end cmp_timespec()
 
 //=======================================================================
 // doc handle_event()
@@ -288,26 +253,4 @@ handle_keyup(const SDL_KeyboardEvent* restrict kevent, struct input_state* restr
 			break;
 	} // end switch()
 } // end handle_keyup()
-
-//=======================================================================
-// doc sub_timespec()
-// TODO
-//=======================================================================
-// def sub_timespec()
-static inline void
-sub_timespec(
-		struct timespec* restrict dst,
-		const struct timespec* restrict lhs,
-		const struct timespec* restrict rhs) {
-	LOGT("lhs={sec=%lld,nsec=%lld},rhs={sec=%lld,nsec=%lld}",
-			lhs->tv_sec, lhs->tv_nsec, rhs->tv_sec, rhs->tv_nsec);
-	dst->tv_sec = lhs->tv_sec - rhs->tv_sec;
-	dst->tv_nsec = lhs->tv_nsec - rhs->tv_nsec;
-
-	if (dst->tv_nsec < 0) {
-		// Perform arithmetic carry:
-		dst->tv_sec -= 1;
-		dst->tv_nsec += 1000000000;
-	}
-} // end difftimespec()
 
