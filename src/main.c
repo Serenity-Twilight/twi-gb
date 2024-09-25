@@ -15,31 +15,34 @@ int main(int argc, char* argv[]) {
 		// ROM filepath not provided.
 		print_usage(argc >= 1 ? argv[0] : "unknown");
 		status = 1;
-		goto end_of_function;
+		goto cleanup_SDL;
 	}
 
 	struct gb_ppu ppu;
 	if (gb_ppu_init(&ppu)) {
 		status = 1;
-		goto end_of_function;
+		goto cleanup_SDL;
 	}
 
 	struct gb_pak* pak = gb_pak_create(argv[1]);
 	if (pak == NULL) {
 		status = 1;
-		goto end_of_function;
+		goto cleanup_ppu;
 	}
 
 	struct gb_core core;
 	if (gb_core_init(&core)) {
-		gb_ppu_destroy(&ppu);
 		status = 1;
-		goto end_of_function;
+		goto cleanup_pak;
 	}
 	gb_core_swap_pak(&core, pak);
 	gb_core_run(&core, &ppu);
 
-end_of_function:
+cleanup_pak:
+	gb_pak_delete(pak);
+cleanup_ppu:
+	gb_ppu_destroy(&ppu);
+cleanup_SDL:
 	SDL_Quit();
 	return status;
 }
