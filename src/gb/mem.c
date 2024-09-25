@@ -9,6 +9,7 @@
 #include "gb/mem/io.h"
 #include "gb/mode.h"
 #include "gb/pad.h"
+#include "gb/pak.h"
 #include "gb/ppu.h"
 
 #define GB_LOG_MAX_LEVEL LVL_NONE
@@ -37,15 +38,6 @@ echo_ram_write(
 		uint8_t value);
 static void
 disable_audio(struct gb_core* restrict core);
-
-//=======================================================================
-//-----------------------------------------------------------------------
-// EXTERNAL GLOBAL VARIABLE DEFINITIONS
-//-----------------------------------------------------------------------
-//=======================================================================
-// FIXME: This is a hack to get custom ROM loading available immediately.
-// Replace once the pak loader is ready to integrate.
-const char* gb_mem_rom_filepath = NULL;
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -151,29 +143,36 @@ gb_mem_u8write(
 	switch (addr >> 12) { // Address via upper nybble
 		case 0x0: case 0x1: case 0x2: case 0x3: // ROM1
 		case 0x4: case 0x5: case 0x6: case 0x7: // ROM2
-		case 0xA: case 0xB: // SRAM
-			// TODO: Pass to MBC
-			return;
+			// Pass to pak's MBC to handle behavior.
+			gb_pak_write8_rom(core->mem.pak,
+					core->mem.map + MEM_B_ROM1,
+					addr - MEM_B_ROM1, value);
+			break;
 		case 0x8: case 0x9: // VRAM
 			// TODO: On CGB, this needs to writethrough to backing VRAM array.
 			// The backing array contains both banks of VRAM that CGB has.
 			core->mem.map[addr] = value;
-			return;
+			break;
+		case 0xA: case 0xB: // SRAM
+			// Pass to pak's MBC to handle behavior.
+			gb_pak_write8_ram(core->mem.pak,
+					core->mem.map + MEM_B_SRAM,
+					addr - MEM_B_SRAM, value);
+			break;
 		case 0xC: case 0xD: // RAM1, RAM2
 			// TODO: On CGB, must writethrough to backing RAM array that
 			// contains all banks.
 			core->mem.map[addr] = value;
 			if (addr < MEM_E_ERAM - MEM_SZ_RAM) // Echo RAM range
 				core->mem.map[addr + MEM_SZ_RAM] = value;
-			return;
+			break;
 		case 0xE: // Echo RAM (most of it, rest shares 0xF range with many other registers).
 			echo_ram_write(core, addr, value);
-			return;
+			break;
 		case 0xF: // Range containing many different things.
 			u8writef(core, addr, value);
-			return;
+			break;
 	} // end switch 
-	core->mem.map[addr] = value;
 } // end gb_mem_u8write()
 
 //=======================================================================
@@ -362,7 +361,7 @@ gb_mem_swap_pak(
 	SELF.pak = pak;
 	if (SELF.pak == NULL)
 		return; // Emulated pak slot is now empty.
-	gb_pak_reset_state(SELF.pak);
+	gb_pak_insert(SELF.pak, SELF.map + MEM_B_ROM1, SELF.map + MEM_B_SRAM);
 } // end gb_mem_swap_pak()
 
 //=======================================================================

@@ -23,18 +23,10 @@ struct gb_mem;
 
 //=======================================================================
 //-----------------------------------------------------------------------
-// EXTERNAL GLOBAL VARIABLE DECLARATIONS
-//-----------------------------------------------------------------------
-//=======================================================================
-// FIXME: This is a hack to get custom ROM loading available immediately.
-// Replace once the pak loader is ready to integrate.
-extern const char* gb_mem_rom_filepath;
-
-//=======================================================================
-//-----------------------------------------------------------------------
 // External function declarations
 //-----------------------------------------------------------------------
 //=======================================================================
+// TODO: So much documentation...
 uint8_t
 gb_mem_init(struct gb_core* restrict core);
 uint8_t
@@ -69,7 +61,9 @@ gb_mem_copy_ppu_state(
 void
 gb_mem_set_pad(struct gb_core* restrict core, uint8_t gb_pad);
 void
-gb_mem_swap_pak(struct gb_core* restrict core, struct gb_pak* restrict pak);
+gb_mem_swap_pak(
+		struct gb_core* restrict core,
+		struct gb_pak* restrict pak);
 
 #endif // GB_MEM_H
 
