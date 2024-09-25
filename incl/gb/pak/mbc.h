@@ -42,21 +42,21 @@
 enum mbc_ids {
 	PAKMBC_UNKNOWN = -1,
 	PAKMBC_NONE = 0,
-	// Commented out MBCs are currently unsupported:
-	//PAKMBC_MBC1,
-	//PAKMBC_MBC2,
-	//PAKMBC_MMM01,
-	//PAKMBC_MBC3,
-	//PAKMBC_MBC5,
-	//PAKMBC_MBC6,
-	//PAKMBC_MBC7,
-	//PAKMBC_M161, what is the pak_type code for this?
-	//PAKMBC_POCKETCAM,
-	//PAKMBC_TAMA5,
-	//PAKMBC_HuC3,
-	//PAKMBC_HuC1,
+	PAKMBC_COUNT,
+	// The following MBCs are currently unsupported:
+	PAKMBC_MBC1,
+	PAKMBC_MBC2,
+	PAKMBC_MMM01,
+	PAKMBC_MBC3,
+	PAKMBC_MBC5,
+	PAKMBC_MBC6,
+	PAKMBC_MBC7,
+	PAKMBC_M161, // what is the pak_type code for this?
+	PAKMBC_POCKETCAM,
+	PAKMBC_TAMA5,
+	PAKMBC_HuC3,
+	PAKMBC_HuC1,
 	// TODO: Populate as support for more MBCs are added.
-	PAKMBC_COUNT
 }; // end enum mbc_ids
 
 //=======================================================================
