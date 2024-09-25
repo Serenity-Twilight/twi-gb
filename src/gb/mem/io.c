@@ -7,7 +7,7 @@
 #include "gb/mem/typedef.h"
 #include "gb/pad.h"
 
-#define GB_LOG_MAX_LEVEL LVL_DBG
+#define GB_LOG_MAX_LEVEL LVL_INF
 
 //=======================================================================
 //-----------------------------------------------------------------------
