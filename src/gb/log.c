@@ -23,7 +23,6 @@ gb_log(const char* restrict filename, const char* restrict funcname,
 	if (!strncmp(filename, file_prefix, sizeof(file_prefix-1)))
 		filename += sizeof(file_prefix-1); // Skip prefix.
 
-	char buf[4096];
 	fprintf(stderr, "%s:%s():%ld [%s]: ",
 			filename, funcname, lineno,
 			gb_log_level_short_str(level));
