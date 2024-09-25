@@ -6,6 +6,7 @@
 #include <time.h>
 #include <SDL.h>
 #include "gb/core.h"
+#include "gb/core/typedef.h"
 #include "gb/cpu.h"
 #include "gb/cpu/interpreter.h"
 #include "gb/log.h"
@@ -15,6 +16,7 @@
 #include "gb/sch.h"
 #define PRX_TRUNCATE_PREFIX 1
 #include "prx/timespec.h"
+#undef PRX_TRUNCATE_PREFIX
 
 #undef GB_LOG_MAX_LEVEL
 #define GB_LOG_MAX_LEVEL LVL_INF
@@ -70,13 +72,25 @@ gb_core_init(struct gb_core* restrict core) {
 } // end gb_core_init()
 
 //=======================================================================
-// def gb_core_run()
+// def gb_core_swap_pak()
 void
+gb_core_swap_pak(
+		struct gb_core* restrict core,
+		struct gb_pak* restrict pak) {
+	gb_mem_swap_pak(core, pak);
+} // end gb_core_swap_pak()
+
+//=======================================================================
+// def gb_core_run()
+void // TODO: Should be typed to return runtime errors
 gb_core_run(
 		struct gb_core* restrict core,
 		struct gb_ppu* restrict ppu) {
-	assert(!SDL_InitSubSystem(SDL_INIT_EVENTS)); // TODO
-
+	assert(core != NULL);
+	assert(core->mem.pak != NULL); // TODO: Don't assert. Do runtime error checking.
+	assert(ppu != NULL);
+	assert(!SDL_InitSubSystem(SDL_INIT_EVENTS)); // TODO: Don't assert. Do runtime error checking.
+	
 	struct timespec next_frame_start_time;
 	if (timespec_get(&next_frame_start_time, TIME_UTC) != TIME_UTC) {
 		LOGF("timespec_get() failure.");
@@ -145,10 +159,12 @@ gb_core_run(
 	} // end while (1)
 } // end gb_core_run()
 
+//=======================================================================
+// def gb_core_set_pad()
 void
 gb_core_set_pad(struct gb_core* restrict core, uint8_t gb_pad) {
 	gb_mem_set_pad(core, gb_pad);
-} // end gb_core_update_pad()
+} // end gb_core_set_pad()
 
 //=======================================================================
 //-----------------------------------------------------------------------

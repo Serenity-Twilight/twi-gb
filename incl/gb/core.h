@@ -1,6 +1,7 @@
 #ifndef GB_CORE_H
 #define GB_CORE_H
 #include <stdint.h>
+#include "gb/pak.h"
 #include "gb/ppu.h"
 
 //=========================================================================
@@ -18,6 +19,10 @@ struct gb_core;
 //=========================================================================
 uint8_t
 gb_core_init(struct gb_core* restrict core);
+void
+gb_core_swap_pak(
+		struct gb_core* restrict core,
+		struct gb_pak* restrict pak);
 void
 gb_core_run(struct gb_core* restrict core, struct gb_ppu* restrict ppu);
 void
