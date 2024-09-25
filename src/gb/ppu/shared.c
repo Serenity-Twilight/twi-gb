@@ -742,7 +742,7 @@ create_bg_shared_info(const struct gb_ppu_state* restrict state) {
 	//
 	// Therefore, if BG_TILEMAP == 0, then indexing begins
 	// at VRAM_DATA1 and all indices have their 7th bit inverted
-	// (which is the equivalent of adding 128 of an unsigned 8-bit int).
+	// (which is the equivalent of adding 128 to an unsigned 8-bit int).
 	struct bg_shared_info info;
 	if (state->lcdc & IO_LCDC_BG_TILEDATA) {
 		info.tiledata = state->vram + VRAM_DATA0;
