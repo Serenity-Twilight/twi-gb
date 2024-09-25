@@ -1,4 +1,5 @@
 #include <time.h>
+#include <stdint.h>
 #include "prx/timespec.h"
 
 //=======================================================================
@@ -9,7 +10,7 @@
 
 //=======================================================================
 // def prx_timespec_add_nsec()
-static inline void
+void
 (prx_timespec_add_nsec)(struct timespec* restrict dst, int32_t nsec) {
 	dst->tv_nsec += nsec;
 	if (dst->tv_nsec >= 1000000000) {
@@ -21,7 +22,7 @@ static inline void
 
 //=======================================================================
 // def prx_timespec_cmp()
-static inline long long
+long long
 (prx_timespec_cmp)(struct timespec* restrict lhs, struct timespec* restrict rhs) {
 	long long sec_diff = lhs->tv_sec - rhs->tv_sec;
 	if (sec_diff != 0)
@@ -31,7 +32,7 @@ static inline long long
 
 //=======================================================================
 // def prx_timespec_sub()
-static inline void
+void
 (prx_timespec_sub)(
 		struct timespec* restrict dst,
 		const struct timespec* restrict lhs,

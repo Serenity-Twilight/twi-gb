@@ -12,21 +12,21 @@
 // doc prx_timespec_add_nsec()
 // TODO
 //=======================================================================
-static inline void
+void
 (prx_timespec_add_nsec)(struct timespec* restrict dst, int32_t nsec);
 
 //=======================================================================
 // doc prx_timespec_cmp()
 // TODO
 //=======================================================================
-static inline long long
+long long
 (prx_timespec_cmp)(struct timespec* restrict lhs, struct timespec* restrict rhs);
 
 //=======================================================================
 // doc prx_timespec_sub()
 // TODO
 //=======================================================================
-static inline void
+void
 (prx_timespec_sub)(
 		struct timespec* restrict dst,
 		const struct timespec* restrict lhs,
