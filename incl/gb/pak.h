@@ -33,5 +33,35 @@ gb_pak_create(const char* restrict pak_id);
 void
 gb_pak_delete(struct gb_pak* restrict pak);
 
+//=======================================================================
+// doc gb_pak_insert()
+// TODO: document
+//=======================================================================
+void
+gb_pak_insert(
+		struct gb_pak* restrict pak,
+		uint8_t* restrict rom_map,
+		uint8_t* restrict ram_map);
+
+//=======================================================================
+// doc gb_pak_write8_ram()
+// TODO: document
+//=======================================================================
+void
+gb_pak_write8_ram(
+		struct gb_pak* restrict pak,
+		uint8_t* restrict ram_map,
+		uint16_t addr, uint8_t val);
+
+//=======================================================================
+// doc gb_pak_write8_rom()
+// TODO: document
+//=======================================================================
+void
+gb_pak_write8_rom(
+		struct gb_pak* restrict pak,
+		uint8_t* restrict rom_map,
+		uint16_t addr, uint8_t val);
+
 #endif // GB_PAK_H
 

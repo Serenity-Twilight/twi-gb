@@ -8,11 +8,11 @@
 #include <string.h>
 #define GB_LOG_MAX_LEVEL LVL_TRC
 #include "gb/log.h"
-#include "gb/mbc.h"
 #include "gb/mem/region.h"
 #include "gb/pak.h"
 #include "gb/pak/const.h"
 #include "gb/pak/header.h"
+#include "gb/pak/mbc.h"
 #include "gb/pak/typedef.h"
 #define PRX_TRUNCATE_PREFIX 1
 #include "prx/io.h"
@@ -193,7 +193,8 @@ gb_pak_insert(
 //=======================================================================
 // def gb_pak_write8_ram()
 void
-gb_pak_write8_ram(struct gb_pak* restrict pak,
+gb_pak_write8_ram(
+		struct gb_pak* restrict pak,
 		uint8_t* restrict ram_map,
 		uint16_t addr, uint8_t val) {
 	assert(pak != NULL);
@@ -213,7 +214,8 @@ gb_pak_write8_ram(struct gb_pak* restrict pak,
 //=======================================================================
 // def gb_pak_write8_rom()
 void
-gb_pak_write8_rom(struct gb_pak* restrict pak,
+gb_pak_write8_rom(
+		struct gb_pak* restrict pak,
 		uint8_t* restrict rom_map,
 		uint16_t addr, uint8_t val) {
 	assert(pak != NULL);
