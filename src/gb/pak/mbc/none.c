@@ -23,6 +23,6 @@ mbc_write8_ram_none(
 		uint16_t addr, uint8_t val) {
 	assert(pak != NULL);
 	assert(pak->ram_bank_count <= 1);
-	mbc_sram_write(pak, ram_map, addr, val);
+	mbc_ram_write(pak, ram_map, addr, val);
 } // end mbc_write8_ram_none()
 
