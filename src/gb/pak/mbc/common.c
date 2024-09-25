@@ -31,7 +31,7 @@ mbc_ram_write(
 // def mbc_swap_rom_bank()
 void
 mbc_swap_rom_bank(
-		const struct gb_pak* restrict pak,
+		struct gb_pak* restrict pak,
 		uint8_t* restrict rom_map,
 		uint16_t new_bank_id) {
 	assert(pak != NULL);
@@ -53,7 +53,7 @@ mbc_swap_rom_bank(
 // def mbc_swap_ram_bank()
 void
 mbc_swap_ram_bank(
-		const struct gb_pak* restrict pak,
+		struct gb_pak* restrict pak,
 		uint8_t* restrict ram_map,
 		uint8_t new_bank_id) {
 	assert(pak != NULL);

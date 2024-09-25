@@ -70,7 +70,7 @@ mbc_ram_write(
 //=======================================================================
 void
 mbc_swap_rom_bank(
-		const struct gb_pak* restrict pak,
+		struct gb_pak* restrict pak,
 		uint8_t* restrict mapping_dst,
 		uint16_t new_bank_id);
 
@@ -107,7 +107,7 @@ mbc_swap_rom_bank(
 //=======================================================================
 void
 mbc_swap_ram_bank(
-		const struct gb_pak* restrict pak,
+		struct gb_pak* restrict pak,
 		uint8_t* restrict mapping_dst,
 		uint8_t new_bank_id);
 
