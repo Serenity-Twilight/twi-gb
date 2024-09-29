@@ -181,6 +181,8 @@ gb_pak_insert(
 	memcpy(rom_map + MEM_SZ_ROM1, pak->rom + MEM_SZ_ROM1, MEM_SZ_ROM2);
 	pak->rom_bank_curr = 1;
 	// Load external RAM bank to map:
+	// TODO: RAM should be inaccessible initially (pak->ram_enabled == 0)
+	//       To simulate this, RAM should be set to 0xFF when disabled.
 	if (pak->ram != NULL) {
 		memcpy(ram_map, pak->ram, MEM_SZ_SRAM);
 		pak->ram_bank_curr = 0;
@@ -199,13 +201,13 @@ gb_pak_write8_ram(
 		uint16_t addr, uint8_t val) {
 	assert(pak != NULL);
 	assert(pak->mbc_id != PAKMBC_UNKNOWN);
-	assert(pak->mbc_id < PAKMBC_COUNT);
+	assert(pak->mbc_id < PAKMBC_SUPPORTED_COUNT);
 	assert(ram_map != NULL);
 	assert(addr < PAK_RAM_BANK_SIZE);
 
 	// Enumerate MBC-specific RAM-write handlers:
 	static const mbc_write8_proc mbc_write8_ram[] = {
-		mbc_write8_ram_none
+		mbc_write8_none_ram
 	};
 	// Pass to MBC-specific RAM-write handler:
 	mbc_write8_ram[pak->mbc_id](pak, ram_map, addr, val);
@@ -220,13 +222,13 @@ gb_pak_write8_rom(
 		uint16_t addr, uint8_t val) {
 	assert(pak != NULL);
 	assert(pak->mbc_id != PAKMBC_UNKNOWN);
-	assert(pak->mbc_id < PAKMBC_COUNT);
+	assert(pak->mbc_id < PAKMBC_SUPPORTED_COUNT);
 	assert(rom_map != NULL);
 	assert(addr < PAK_ROM_BANK_SIZE);
 
 	// Enumerate MBC-specific ROM-write handlers:
 	static const mbc_write8_proc mbc_write8_rom[] = {
-		mbc_write8_rom_none
+		mbc_write8_none_rom
 	};
 	// Pass to MBC-specific ROM-write handler:
 	mbc_write8_rom[pak->mbc_id](pak, rom_map, addr, val);
