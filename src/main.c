@@ -18,24 +18,29 @@ int main(int argc, char* argv[]) {
 		goto cleanup_SDL;
 	}
 
-	struct gb_ppu ppu;
-	if (gb_ppu_init(&ppu)) {
-		status = 1;
-		goto cleanup_SDL;
-	}
-
+	//-- Initialize game pak from ROM file:
 	struct gb_pak* pak = gb_pak_create(argv[1]);
 	if (pak == NULL) {
 		status = 1;
 		goto cleanup_ppu;
 	}
 
+	//-- Initialize PPU (pixel processing unit):
+	struct gb_ppu ppu;
+	if (gb_ppu_init(&ppu)) {
+		status = 1;
+		goto cleanup_SDL;
+	}
+
+	//-- Initialize emulator core:
 	struct gb_core core;
 	if (gb_core_init(&core)) {
 		status = 1;
 		goto cleanup_pak;
 	}
+	//-- Insert pak into core:
 	gb_core_swap_pak(&core, pak);
+	//-- Begin emulation:
 	gb_core_run(&core, &ppu);
 
 cleanup_pak:
