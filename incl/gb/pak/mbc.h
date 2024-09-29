@@ -31,18 +31,24 @@
 //---------------------------
 
 //=======================================================================
-// doc enum mbc_ids
+//-----------------------------------------------------------------------
+// EXTERNAL CONSTANT DEFINITIONS
+//-----------------------------------------------------------------------
+//=======================================================================
+
+//=======================================================================
+// doc enum mbc_id
 //
 // Listing of all known & supported MBCs (Memory Bank Controllers).
 // The following enumeration provides an localized index for uniquely
 // defining each MBC that is indendepent from their native identification
 // in the Game Boy header.
 //=======================================================================
-// def enum mbc_ids
-enum mbc_ids {
+// def enum mbc_id
+enum mbc_id {
 	PAKMBC_UNKNOWN = -1,
 	PAKMBC_NONE = 0,
-	PAKMBC_COUNT,
+	PAKMBC_SUPPORTED_COUNT,
 	// The following MBCs are currently unsupported:
 	PAKMBC_MBC1,
 	PAKMBC_MBC2,
@@ -56,8 +62,15 @@ enum mbc_ids {
 	PAKMBC_TAMA5,
 	PAKMBC_HuC3,
 	PAKMBC_HuC1,
+	PAKMBC_COUNT
 	// TODO: Populate as support for more MBCs are added.
-}; // end enum mbc_ids
+}; // end enum mbc_id
+
+//=======================================================================
+//-----------------------------------------------------------------------
+// EXTERNAL TYPE DEFINITIONS
+//-----------------------------------------------------------------------
+//=======================================================================
 
 //=======================================================================
 // doc typedef mbc_write8_proc()
@@ -85,6 +98,19 @@ typedef void (*mbc_write8_proc)(
 		struct gb_pak* restrict pak,
 		uint8_t* restrict map,
 		uint16_t addr, uint8_t val);
+
+//=======================================================================
+//-----------------------------------------------------------------------
+// EXTERNAL FUNCTION DECLARATIONS
+//-----------------------------------------------------------------------
+//=======================================================================
+
+//=======================================================================
+// doc mbc_id_tostring()
+// TODO
+//=======================================================================
+const char*
+mbc_id_tostring(enum mbc_id id);
 
 #endif // GB_PAK_MBC_H
 
