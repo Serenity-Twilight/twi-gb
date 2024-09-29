@@ -5,6 +5,33 @@
 #include "gb/pak/typedef.h"
 
 //=======================================================================
+// def mbc_ram_enable()
+void
+mbc_ram_enable(
+		struct gb_pak* restrict pak,
+		uint8_t* restrict ram_map,
+		uint_fast8_t enable) {
+	assert(pak != NULL);
+	if (pak->ram_bank_count == 0)
+		return; // This pak has no RAM.
+	assert(pak->ram_bank_curr < pak->ram_bank_count);
+
+	if (enable) {
+		if (!(pak->ram_enabled)) { // currently disabled
+			// Copy currently selected RAM bank to `ram_map`:
+			memcpy(ram_map, pak->ram + pak->ram_bank_curr * PAK_RAM_BANK_SIZE, PAK_RAM_BANK_SIZE);
+			pak->ram_enabled = 1;
+		}
+	} else { // disable
+		if (pak->ram_enabled) { // currently enabled
+			// Copy 0xFF into `ram_map`, simulating a failed read from disabled RAM:
+			memset(ram_map, 0xFF, PAK_RAM_BANK_SIZE);
+			pak->ram_enabled = 0;
+		}
+	} // end ifelse (enable)
+} // end mbc_ram_enable()
+
+//=======================================================================
 // def mbc_ram_write()
 void
 mbc_ram_write(

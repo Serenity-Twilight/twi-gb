@@ -4,6 +4,49 @@
 #include "gb/pak/typedef.h"
 
 //=======================================================================
+// doc mbc_ram_enable()
+//
+// Enables/disables R/W access to the RAM contained in `pak`.
+//
+// RAM reads (which are handled internally within the `gb/mem` module
+// for performance reasons) when disabled should always return `0xFF`.
+// This is simulated by setting the bytes within `ram_map` to 0xFF when
+// `enable == 0`.
+//
+// If this function is called for a pak with no internal RAM, then this
+// function does nothing.
+//
+// If this function is called with `enable != 0` when RAM access is
+// already enabled or `enable == 0` when RAM access is already disabled,
+// then this function does nothing.
+//
+// Behavior is undefined if any of the following are true:
+// - `pak` does not point to a valid `gb_pak` object.
+// - `ram_map` does not point to the start of a block of memory of at
+//   least `PAK_RAM_BANK_SIZE` bytes in size
+//   (defined in incl/gb/pak/const.h)
+//-----------------------------------------------------------------------
+// Parameters:
+// * pak:
+//   Pointer to a valid `gb_pak` object to enable or disable the RAM of,
+//   should it possess any internal RAM.
+// * ram_map:
+//   Pointer to an array of at least `PAK_RAM_BANK_SIZE` bytes,
+//   assumed to be an active, memory-mapped copy of the active RAM bank.
+//   When RAM is enabled, the currently active RAM bank is copied to this
+//   address. When RAM is disabled, the bytes at this address are all set
+//   to `0xFF`.
+// * enable:
+//   This function attempts to enable RAM when `enable != 0`,
+//   and attempts to disable RAM when `enable == 0`.
+//=======================================================================
+void
+mbc_ram_enable(
+		struct gb_pak* restrict pak,
+		uint8_t* restrict ram_map,
+		uint_fast8_t enable);
+
+//=======================================================================
 // doc mbc_ram_write()
 //
 // Writes `val` to `ram_map` and `pak`'s backing `ram` member at
