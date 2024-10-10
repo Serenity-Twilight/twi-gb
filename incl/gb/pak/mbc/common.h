@@ -82,39 +82,40 @@ mbc_ram_write(
 		uint16_t addr, uint8_t val);
 
 //=======================================================================
-// doc mbc_swap_rom_bank()
+// doc mbc_swap_rom2_bank()
 //
 // Selects the ROM bank specified by `new_bank_id` to be the new active
 // ROM bank for `pak`, and copies the new active ROM bank's contents
-// to the memory region pointed to by `mapping_dst`.
+// to the memory region pointed to by `rom_map`.
 //
 // If `new_bank_id` matches the currently selected ROM bank, this
 // function does nothing.
 //
-// If `new_bank_id` exceeds the number of ROM banks contained in `pak`,
-// then `new_bank_id` will be treated as if it were the modulus (%) of
-// `new_bank_id`.
-//
 // Behavior is undefined if any of the following are true:
 // - `pak` does not point to a valid `gb_pak` object.
-// - `mapping_dst` does not point to the start of a block of memory of
+// - `rom_map` does not point to the start of a block of memory of
 //   at least `PAK_ROM_BANK_SIZE` bytes in size
 //   (defined in incl/gb/pak/const.h).
+// - `new_bank_id` exceeds the number of ROM banks contained in `pak`.
 //-----------------------------------------------------------------------
 // Parameters:
 // * pak:
 //   Pointer to a valid `gb_pak` object.
 //   Source of the copy of the newly-selected ROM bank.
-// * mapping_dst:
-//   Pointer to memory, destination of the copy of the newly-selected
-//   ROM bank.
+// * rom_map:
+//   Pointer to the start of an external copy of the ROM map.
+//   When this function returns, the `PAK_ROM_BANK_SIZE` bytes starting
+//   at the address `rom_map + PAK_ROM_BANK_SIZE` will reflect the contents
+//   of the mapped ROM bank identified by `new_bank_id`.
+//   The first `PAK_ROM_BANK_SIZE` bytes (starting at `rom_map`) will
+//   never be modified by this function.
 // * new_bank_id:
 //   Unique index of the specified ROM bank to select.
 //=======================================================================
 void
-mbc_swap_rom_bank(
+mbc_swap_rom2_bank(
 		struct gb_pak* restrict pak,
-		uint8_t* restrict mapping_dst,
+		uint8_t* restrict rom_map,
 		uint16_t new_bank_id);
 
 //=======================================================================
@@ -122,7 +123,7 @@ mbc_swap_rom_bank(
 //
 // Selects the RAM bank specified by `new_bank_id` to be the new active
 // RAM bank for `pak`, and copies the new active RAM bank's contents
-// to the memory region pointed to by `mapping_dst`.
+// to the memory region pointed to by `ram_map`.
 //
 // If `pak` does not support RAM, this function does nothing.
 // If `new_bank_id` matches the currently selected RAM bank, this
@@ -134,24 +135,29 @@ mbc_swap_rom_bank(
 //
 // Behavior is undefined if any of the following are true:
 // - `pak` does not point to a valid `gb_pak` object.
-// - `mapping_dst` does not point to the start of a block of memory of
+// - `ram_map` does not point to the start of a block of memory of
 //   at least `PAK_RAM_BANK_SIZE` bytes in size
 //   (defined in incl/gb/pak/const.h).
+// - `new_bank_id` exceeds the number of RAM banks contained in `pak`.
 //-----------------------------------------------------------------------
 // Parameters:
 // * pak:
 //   Pointer to a valid `gb_pak` object.
 //   Source of the copy of the newly-selected RAM bank.
-// * mapping_dst:
-//   Pointer to memory, destination of the copy of the newly-selected
-//   RAM bank.
+// * ram_map:
+//   Pointer to the start of an external copy of the RAM map.
+//   When this function returns, the `PAK_RAM_BANK_SIZE` bytes starting
+//   at the address `ram_map + PAK_RAM_BANK_SIZE` will reflect the contents
+//   of the mapped RAM bank identified by `new_bank_id`.
+//   The first `PAK_RAM_BANK_SIZE` bytes (starting at `ram_map`) will
+//   never be modified by this function.
 // * new_bank_id:
 //   Unique index of the specified RAM bank to select.
 //=======================================================================
 void
 mbc_swap_ram_bank(
 		struct gb_pak* restrict pak,
-		uint8_t* restrict mapping_dst,
+		uint8_t* restrict ram_map,
 		uint8_t new_bank_id);
 
 #endif // GB_PAK_MBC_COMMON_H

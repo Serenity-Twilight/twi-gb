@@ -55,9 +55,9 @@ mbc_ram_write(
 } // end mbc_ram_write()
 
 //=======================================================================
-// def mbc_swap_rom_bank()
+// def mbc_swap_rom2_bank()
 void
-mbc_swap_rom_bank(
+mbc_swap_rom2_bank(
 		struct gb_pak* restrict pak,
 		uint8_t* restrict rom_map,
 		uint16_t new_bank_id) {
@@ -65,16 +65,15 @@ mbc_swap_rom_bank(
 	assert(pak->rom != NULL);
 	assert(pak->rom_bank_count >= 2);
 	assert(rom_map != NULL);
+	assert(new_bank_id < pak->rom_bank_count);
 
-	// Truncate values that are greater than the total number of banks:
-	new_bank_id %= pak->rom_bank_count;
 	if (new_bank_id == pak->rom_bank_curr)
 		return; // New bank == old bank, do nothing
-	memcpy(rom_map + MEM_B_ROM2,
+	memcpy(rom_map + PAK_ROM_BANK_SIZE,
 			pak->rom + new_bank_id * PAK_ROM_BANK_SIZE,
 			PAK_ROM_BANK_SIZE);
 	pak->rom_bank_curr = new_bank_id;
-} // end mbc_swap_rom_bank()
+} // end mbc_swap_rom2_bank()
 
 //=======================================================================
 // def mbc_swap_ram_bank()
@@ -88,8 +87,7 @@ mbc_swap_ram_bank(
 
 	if (pak->ram != NULL) {
 		assert(pak->ram_bank_count > 0);
-		// Truncate values that are greater than the total number of banks:
-		new_bank_id %= pak->ram_bank_count;
+		assert(new_bank_id < pak->ram_bank_count);
 		if (new_bank_id == pak->ram_bank_curr)
 			return; // New bank == old bank, do nothing
 		memcpy(ram_map, pak->ram + new_bank_id * PAK_RAM_BANK_SIZE, PAK_RAM_BANK_SIZE);
