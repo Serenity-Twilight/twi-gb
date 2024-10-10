@@ -73,7 +73,7 @@ enum mbc_id {
 //=======================================================================
 
 //=======================================================================
-// doc typedef mbc_write8_proc()
+// doc typedef mbc_w8_proc()
 // 
 // Abstract interface definition for writing to an MBC-controlled region
 // of memory.
@@ -85,18 +85,22 @@ enum mbc_id {
 // Parameters:
 // * pak:
 //   Pointer to a valid `gb_pak` object.
-// * map:
-//   Pointer to a region of memory representing a mapped copy of either
-//   a ROM bank or a RAM bank owned by `pak`.
+// * rom_map:
+//   Pointer to a region of memory representing a copy of the active ROM
+//   bank owned by `pak`.
+// * ram_map:
+//   Pointer to a region of memory representing a copy of the active RAM
+//   bank owned by `pak`.
 // * addr:
 //   16-bit address pointing to a region in either ROM or RAM.
 // * val:
 //   8-bit value being written to the byte pointed to by `addr`.
 //=======================================================================
-// def typedef mbc_write8_proc()
-typedef void (*mbc_write8_proc)(
+// def typedef mbc_w8_proc()
+typedef void (*mbc_w8_proc)(
 		struct gb_pak* restrict pak,
-		uint8_t* restrict map,
+		uint8_t* restrict rom_map,
+		uint8_t* restrict ram_map,
 		uint16_t addr, uint8_t val);
 
 //=======================================================================

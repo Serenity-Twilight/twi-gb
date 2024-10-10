@@ -206,11 +206,12 @@ gb_pak_write8_ram(
 	assert(addr < PAK_RAM_BANK_SIZE);
 
 	// Enumerate MBC-specific RAM-write handlers:
-	static const mbc_write8_proc mbc_write8_ram[] = {
-		mbc_write8_none_ram
+	static const mbc_w8_proc mbc_w8_ram[] = {
+		mbc_write8_none_ram,
+		mbc_w8_mbc1_ram,
 	};
 	// Pass to MBC-specific RAM-write handler:
-	mbc_write8_ram[pak->mbc_id](pak, ram_map, addr, val);
+	mbc_w8_ram[pak->mbc_id](pak, rom_map, ram_map, addr, val);
 } // end gb_pak_write8_ram()
 
 //=======================================================================
@@ -227,11 +228,12 @@ gb_pak_write8_rom(
 	assert(addr < PAK_ROM_BANK_SIZE);
 
 	// Enumerate MBC-specific ROM-write handlers:
-	static const mbc_write8_proc mbc_write8_rom[] = {
-		mbc_write8_none_rom
+	static const mbc_w8_proc mbc_w8_rom[] = {
+		mbc_write8_none_rom,
+		mbc_w8_mbc1_rom,
 	};
 	// Pass to MBC-specific ROM-write handler:
-	mbc_write8_rom[pak->mbc_id](pak, rom_map, addr, val);
+	mbc_w8_rom[pak->mbc_id](pak, rom_map, ram_map, addr, val);
 } // end gb_pak_write8_rom()
 
 //=======================================================================
