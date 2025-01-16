@@ -114,11 +114,7 @@ gb_core_run(
 				return;
 			}
 		} // end event polling
-#undef GB_LOG_MAX_LEVEL
-#define GB_LOG_MAX_LEVEL LVL_TRC
 		LOGD("pad=0x%02X -> pad=0x%02X", old_pad, input.pad);
-#undef GB_LOG_MAX_LEVEL
-#define GB_LOG_MAX_LEVEL LVL_INF
 		gb_core_set_pad(core, input.pad);
 
 		// Add total frame time to the start time of this frame to get
