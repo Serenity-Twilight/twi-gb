@@ -4,32 +4,34 @@
 #include "gb/pak.h"
 
 //=======================================================================
-// decl mbc_write8_none_rom()
+// doc mbc_w8_none_rom()
 //
 // Executes behavior which occurs during ROM writes in paks which do
 // not possess an MBC.
 //
-// Implements the `mbc_write8_proc` interface,
+// Implements the `mbc_w8_proc` interface,
 // defined in incl/gb/pak/mbc.h
 //=======================================================================
 void
-mbc_write8_none_rom(
-		struct gb_pak* restrict,
-		uint8_t* restrict,
-		uint16_t, uint8_t);
+mbc_w8_none_rom(
+		struct gb_pak* restrict pak,
+		uint8_t* restrict rom_map,
+		uint8_t* restrict ram_map,
+		uint16_t addr, uint8_t val);
 
 //=======================================================================
-// decl mbc_write8_none_ram()
+// doc mbc_w8_none_ram()
 //
 // Executes behavior which occurs during RAM writes in paks which do
 // not possess an MBC.
 //
-// Implements the `mbc_write8_proc` interface,
+// Implements the `mbc_w8_proc` interface,
 // defined in incl/gb/pak/mbc.h
 //=======================================================================
 void
-mbc_write8_none_ram(
+mbc_w8_none_ram(
 		struct gb_pak* restrict pak,
+		uint8_t* restrict rom_map,
 		uint8_t* restrict ram_map,
 		uint16_t addr, uint8_t val);
 
