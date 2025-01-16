@@ -28,6 +28,7 @@
 //---------------------------
 // MBC handler declarations:
 #include "gb/pak/mbc/none.h"
+#include "gb/pak/mbc/mbc1.h"
 //---------------------------
 
 //=======================================================================
@@ -48,9 +49,10 @@
 enum mbc_id {
 	PAKMBC_UNKNOWN = -1,
 	PAKMBC_NONE = 0,
+	PAKMBC_MBC1,
 	PAKMBC_SUPPORTED_COUNT,
 	// The following MBCs are currently unsupported:
-	PAKMBC_MBC1,
+	// TODO: PAKMBC_MBC1M
 	PAKMBC_MBC2,
 	PAKMBC_MMM01,
 	PAKMBC_MBC3,
