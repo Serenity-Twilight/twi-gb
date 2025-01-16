@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define GB_LOG_MAX_LEVEL LVL_TRC
+#define GB_LOG_MAX_LEVEL LVL_DBG
 #include "gb/log.h"
 #include "gb/mem/region.h"
 #include "gb/pak.h"
@@ -77,11 +77,8 @@
 //   enums with accompanying error strings.
 //=======================================================================
 
-//enum {
-//	ROM_BANK_SIZE = 16384, // bytes
-//	RAM_BANK_SIZE = 8192, // bytes
-//};
-
+//-----------------------------------------------------------------------
+// TODO: This stuff is for when pak_ids aren't just ROM filepaths:
 //struct pakfile_params {
 //	size_t directory_count;
 //	size_t extension_count;
@@ -96,6 +93,7 @@
 //	size_t pathsize;
 //	char path[];
 //};
+//-----------------------------------------------------------------------
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -193,10 +191,11 @@ gb_pak_insert(
 } // end gb_pak_insert()
 
 //=======================================================================
-// def gb_pak_write8_ram()
+// def gb_pak_w8ram()
 void
-gb_pak_write8_ram(
+gb_pak_w8ram(
 		struct gb_pak* restrict pak,
+		uint8_t* restrict rom_map,
 		uint8_t* restrict ram_map,
 		uint16_t addr, uint8_t val) {
 	assert(pak != NULL);
@@ -207,19 +206,20 @@ gb_pak_write8_ram(
 
 	// Enumerate MBC-specific RAM-write handlers:
 	static const mbc_w8_proc mbc_w8_ram[] = {
-		mbc_write8_none_ram,
+		mbc_w8_none_ram,
 		mbc_w8_mbc1_ram,
 	};
 	// Pass to MBC-specific RAM-write handler:
 	mbc_w8_ram[pak->mbc_id](pak, rom_map, ram_map, addr, val);
-} // end gb_pak_write8_ram()
+} // end gb_pak_w8ram()
 
 //=======================================================================
-// def gb_pak_write8_rom()
+// def gb_pak_w8rom()
 void
-gb_pak_write8_rom(
+gb_pak_w8rom(
 		struct gb_pak* restrict pak,
 		uint8_t* restrict rom_map,
+		uint8_t* restrict ram_map,
 		uint16_t addr, uint8_t val) {
 	assert(pak != NULL);
 	assert(pak->mbc_id != PAKMBC_UNKNOWN);
@@ -229,12 +229,12 @@ gb_pak_write8_rom(
 
 	// Enumerate MBC-specific ROM-write handlers:
 	static const mbc_w8_proc mbc_w8_rom[] = {
-		mbc_write8_none_rom,
+		mbc_w8_none_rom,
 		mbc_w8_mbc1_rom,
 	};
 	// Pass to MBC-specific ROM-write handler:
 	mbc_w8_rom[pak->mbc_id](pak, rom_map, ram_map, addr, val);
-} // end gb_pak_write8_rom()
+} // end gb_pak_w8rom()
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -312,7 +312,30 @@ gb_pak_write8_rom(
 //} // end open_ramfile()
 
 //=======================================================================
+// doc fpcreate_pak()
+//
+// Creates a new `gb_pak` object from the ROM identified by the filepath
+// `rom_fp`, with its battery-backed RAM contained within the file
+// identified by the filepath `ram_fp`, if such RAM exists.
+//-----------------------------------------------------------------------
+// Parameters:
+// * rom_fp:
+//   Filepath identifying the file containing the ROM to create a `gb_pak`
+//   object for.
+// * ram_fp:
+//   Filepath identifying the battery-backed RAM saved for the ROM.
+//
+// Returns:
+// On success, a pointer to the newly created `gb_pak` object.
+// On failure, returns NULL.
+// Failure may occur due to one of the following reasons:
+// - Failure to access the file at `rom_fp`.
+// - The ROM at `rom_fp` is either invalid or unsupported by the parser.
+// - Memory allocation fails for the `gb_pak` object.
+//-----------------------------------------------------------------------
+// Behavior is undefined if either `rom_fp` or `ram_fp` are `NULL`.
 //=======================================================================
+// def fpcreate_pak()
 static struct gb_pak*
 fpcreate_pak(
 		const char* restrict rom_fp,
@@ -346,7 +369,35 @@ fail_close_rom_file:
 } // end fpcreate_pak()
 
 //=======================================================================
+// doc alloc_pak()
+//
+// Allocates memory required for a `gb_pak` object to support a ROM
+// described by `ainfo` and `save_filepath`.
+//
+// After allocation, it is necessary to pass the returned `gb_pak`
+// object to `init_pak()` for initialization.
+//-----------------------------------------------------------------------
+// Parameters:
+// * ainfo:
+//   Header info parsed from a ROM file, used to determine the amount
+//   of memory required to support that ROM as a `gb_pak` object.
+// * save_filepath:
+//   Filepath string to where the ROM described by `ainfo`'s
+//   battery-backed RAM should be stored (if applicable).
+//
+// Returns:
+// On success, a pointer to an uninitialized `gb_pak` object of
+// appropriate size to support the ROM described by its arguments.
+//
+// Returns NULL if this function is unable to allocate enough memory to
+// support the ROM described by its arguments.
+//-----------------------------------------------------------------------
+// Behavior is undefined if any of the following are true:
+// - `ainfo` does not point to a valid `pakhdr_alloc_info` object.
+// - `save_filepath` points to NULL when `ainfo` indicates that the ROM
+//   supports battery-backed RAM saving.
 //=======================================================================
+// def alloc_pak()
 static struct gb_pak*
 alloc_pak(
 		const struct pakhdr_alloc_info* restrict ainfo,
@@ -397,7 +448,57 @@ alloc_pak(
 } // end alloc_pak()
 
 //=======================================================================
+// doc init_pak()
+//
+// Initializes an allocated `gb_pak` object, as follows:
+// - Copies the first `ainfo->rom_size` bytes of `rom_file` to `pak->rom`.
+//   If the contents of `rom_file` is smaller than `ainfo->rom_size` bytes,
+//   the remainder of `pak->rom` is padded with `0xFF`.
+// - If the pak supports battery-backed saves, then the first
+//   `ainfo->ram_size` bytes of the file identified by `save_filepath`
+//   are copied to `pak->ram`, and the `save_filepath` string is copied
+//   to `pak->save_filepath`.
+// - Pak feature flags are copied from `ainfo` to `pak`.
+//
+// Initialization of state flags is postponed until the pak is inserted,
+// as inserting a pak always resets its state.
+//-----------------------------------------------------------------------
+// Parameters:
+// * pak:
+//   Points to an allocated but uninitialized `gb_pak` object.
+//   `pak` should have been allocated using the same `ainfo` and
+//   `save_filepath` as the identically-named arguments passed to this
+//   function.
+//   All static (non-state) fields are initialized by this function.
+// * ainfo:
+//   Allocation info taken from `rom_file`.
+// * rom_file:
+//   Open, readable `FILE` handle to the ROM data to load into `pak`.
+// * save_filepath:
+//   Character string containing the filepath to previously saved
+//   RAM data associated with the ROM in `rom_file`.
+//   Can be NULL, such as when no saved battery-backed RAM data exists.
+//
+// Returns:
+// 0 - On success
+// 1 - On failure to copy the contents of `rom_file` into `pak->rom`.
+//     In such cases:
+//     * the state of the memory pointed to by `pak->rom` is unknown,
+//       but no other members of `pak` will have been modified.
+//     * The position of `rom_file`'s file pointer is unknown.
+//-----------------------------------------------------------------------
+// Behavior is undefined if any of the following are true:
+// - `pak` does not point to `gb_pak` object allocated using the same
+//   `ainfo` structure and `save_filepath` string as those passed to this
+//   function.
+// - `ainfo` does not point to a valid `pakhdr_alloc_info` object,
+//   previously used to allocate memory for `pak`.
+// - `rom_file` does not point to an active, readable `FILE` object
+//   containing the same ROM data used to generate `ainfo`.
+// - `save_filepath` does not point to the same data used to allocate
+//   `pak` (either a RAM filepath string, or NULL).
 //=======================================================================
+// def init_pak()
 static int
 init_pak(
 		struct gb_pak* restrict pak,
@@ -454,7 +555,7 @@ init_pak(
 		strcpy(pak->save_filepath, save_filepath);
 	} else {
 		LOGI("Pak does NOT support battery-backed saves.");
-	}// end ifelse (pak contains battery)
+	} // end ifelse (pak contains battery)
 	
 	//-------------------------------------------
 	//--- Initialize remaining gb_pak members ---
@@ -463,44 +564,29 @@ init_pak(
 	pak->ram_bank_count = ainfo->ram_bank_count;
 	pak->mbc_id = ainfo->mbc_id;
 	pak->battery = ainfo->battery;
-	// Pak state fields:
+	// Pak state fields - initialization performed in `gb_pak_insert()`
+	// TODO: Remove these after making sure they happen on insertion.
 	pak->rom_bank_curr = pak->ram_bank_curr = 0;
-	pak->dirty_ram = pak->ram_enabled = 0;
+	pak->dirty_ram = pak->ram_enabled = pak->bank_mode = 0;
 
 	return 0; // success
 } // end init_pak()
 
-//static inline int
-//decode_alloc_info(
-//		struct decoded_alloc_info* restrict dinfo,
-//		const struct encoded_alloc_info* restrict einfo) {
-//	assert(dinfo != NULL);
-//	assert(einfo != NULL);
-//	if (decode_pak_type(&(dinfo->feat), einfo->pak_type_code))
-//		return 1; // Unrecognized pak type code
-//	dinfo->rom_bank_count = decode_rom_bank_count(einfo->rom_size_code);
-//	if (dinfo->rom_bank_count == (uint16_t)-1)
-//		return 2; // Unrecognized rom size code
-//	dinfo->ram_bank_count = decode_ram_bank_count(einfo->ram_size_code);
-//	if (dinfo->ram_bank_count == (uint8_t)-1)
-//		return 3; // Unrecognized ram size code
-//	return 0; // Success
-//} // end decode_alloc_info()
-
-//static inline int
-//load_header_byte(FILE* restrict romfile, enum header_addr address) {
-//	if (fseek(romfile, address, SEEK_SET))
-//		return -1;
-//	int byte = fgetc(romfile);
-//	if (byte == EOF)
-//		return -2;
-//	return byte;
-//} // end load_header_byte()
-
 //=======================================================================
+// doc pad_size_for_alignment()
+//
 // Pads the end of the provided size so that whatever data follows it
 // has a minimum alignment of `alignof(max_align_t)`.
+//-----------------------------------------------------------------------
+// Parameters:
+// * unpadded_size:
+//   The desired size in bytes before padding.
+//
+// Returns:
+// The value of `unpadded_size` padded to a minimum alignment of
+// `alignof(max_align_t)`.
 //=======================================================================
+// def pad_size_for_alignment()
 static inline size_t
 pad_size_for_alignment(size_t unpadded_size) {
 	size_t padding = alignof(max_align_t) - (unpadded_size % alignof(max_align_t));
@@ -509,15 +595,4 @@ pad_size_for_alignment(size_t unpadded_size) {
 	else
 		return unpadded_size; // already aligned, no padding necessary
 } // end pad_size_for_alignment()
-
-//=======================================================================
-//=======================================================================
-//static inline struct pak_region_size
-//sizeof_extmem(const struct decoded_alloc_info* restrict ainfo) {
-//	assert(ainfo != NULL);
-//	struct pak_region_size size = {
-//		.rom = ainfo->rom_bank_count * ROM_BANK_SIZE,
-//		.ram = ainfo->ram_bank_count * RAM_BANK_SIZE };
-//	return size;
-//} // end size_extmem()
 
