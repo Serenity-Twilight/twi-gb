@@ -39,7 +39,8 @@ mbc_ram_write(
 		uint8_t* restrict ram_map,
 		uint16_t addr, uint8_t val) {
 	assert(pak != NULL);
-	assert(addr < MEM_SZ_SRAM);
+	assert(ram_map != NULL);
+	assert(addr < PAK_RAM_BANK_SIZE);
 
 	if (pak->ram_bank_count > 0) {
 		assert(pak->ram != NULL);
@@ -55,6 +56,26 @@ mbc_ram_write(
 } // end mbc_ram_write()
 
 //=======================================================================
+// def mbc_swap_rom1_bank()
+void
+mbc_swap_rom1_bank(
+		const struct gb_pak* restrict pak,
+		uint8_t* restrict rom_map,
+		uint16_t new_bank_id) {
+	assert(pak != NULL);
+	assert(pak->rom != NULL);
+	assert(rom_map != NULL);
+	assert(new_bank_id < pak->rom_bank_count);
+
+	// `gb_pak` contains no members to track the currently selected
+	// ROM1 bank, so this function must assume that the caller has
+	// greater context to deem this operation necessary.
+	memcpy(rom_map,
+			pak->rom + new_bank_id * PAK_ROM_BANK_SIZE,
+			PAK_ROM_BANK_SIZE);
+} // end mbc_swap_rom1_bank()
+
+//=======================================================================
 // def mbc_swap_rom2_bank()
 void
 mbc_swap_rom2_bank(
@@ -63,7 +84,6 @@ mbc_swap_rom2_bank(
 		uint16_t new_bank_id) {
 	assert(pak != NULL);
 	assert(pak->rom != NULL);
-	assert(pak->rom_bank_count >= 2);
 	assert(rom_map != NULL);
 	assert(new_bank_id < pak->rom_bank_count);
 
