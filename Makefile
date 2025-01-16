@@ -12,6 +12,7 @@ define GB_SRC_FILES =
 	gb/pak/header.c
 	gb/pak/mbc.c
 	gb/pak/mbc/common.c
+	gb/pak/mbc/mbc1.c
 	gb/pak/mbc/none.c
 	gb/ppu.c
 	gb/ppu/shared.c
