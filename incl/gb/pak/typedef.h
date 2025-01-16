@@ -24,6 +24,8 @@ struct gb_pak {
 	// State flags:
 	unsigned int dirty_ram : 1;
 	unsigned int ram_enabled : 1;
+	unsigned int bank_mode: 1;
+	unsigned int masked_ram_bank: 2;
 }; // end struct gb_pak
 
 #endif // GB_PAK_TYPE_H
