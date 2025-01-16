@@ -4,7 +4,7 @@
 #include "gb/cpu.h"
 #include "gb/cpu/opc.h"
 #include "gb/cpu/reg.h"
-#define GB_LOG_MAX_LEVEL LVL_TRC
+#define GB_LOG_MAX_LEVEL LVL_INF
 #include "gb/log.h"
 #include "gb/mem.h"
 #include "gb/mem/io.h"

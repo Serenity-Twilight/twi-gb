@@ -8,6 +8,7 @@
 #include "gb/pak/mbc.h"
 #define PRX_TRUNCATE_PREFIX 1
 #include "prx/incbuf.h"
+#undef PRX_TRUNCATE_PREFIX
 
 //=======================================================================
 //-----------------------------------------------------------------------
@@ -122,6 +123,7 @@ pakhdr_dump(char* restrict buf, size_t bufsz,
 
 	dump_logo_check(&ibuf, rom);
 	dump_title(&ibuf, rom);
+	// TODO: Dump more stuff.
 
 	incbuf_terminate(&ibuf);
 	return ibuf.pos;
@@ -178,6 +180,7 @@ decode_pak_type(struct pakhdr_alloc_info* restrict ainfo) {
 		case 0x01: // MBC1
 		case 0x02: // MBC1+RAM
 		case 0x03: // MBC1+RAM+BATTERY
+			// TODO: Identify MBC1M paks
 			ainfo->mbc_id = PAKMBC_MBC1;
 			ainfo->battery = (ainfo->pak_type_code == 0x03);
 			break;

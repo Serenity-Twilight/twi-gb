@@ -144,8 +144,9 @@ gb_mem_u8write(
 		case 0x0: case 0x1: case 0x2: case 0x3: // ROM1
 		case 0x4: case 0x5: case 0x6: case 0x7: // ROM2
 			// Pass to pak's MBC to handle behavior.
-			gb_pak_write8_rom(core->mem.pak,
+			gb_pak_w8rom(core->mem.pak,
 					core->mem.map + MEM_B_ROM1,
+					core->mem.map + MEM_B_SRAM,
 					addr - MEM_B_ROM1, value);
 			break;
 		case 0x8: case 0x9: // VRAM
@@ -155,7 +156,8 @@ gb_mem_u8write(
 			break;
 		case 0xA: case 0xB: // SRAM
 			// Pass to pak's MBC to handle behavior.
-			gb_pak_write8_ram(core->mem.pak,
+			gb_pak_w8ram(core->mem.pak,
+					core->mem.map + MEM_B_ROM1,
 					core->mem.map + MEM_B_SRAM,
 					addr - MEM_B_SRAM, value);
 			break;

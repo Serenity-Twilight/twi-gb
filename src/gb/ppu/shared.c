@@ -6,14 +6,14 @@
 #include <string.h>
 #include <threads.h>
 #include "gb/core/decl.h"
+#define PPU_LOG_LEVEL LVL_INF
+#define GB_LOG_MAX_LEVEL PPU_LOG_LEVEL
 #include "gb/log.h"
 #include "gb/mem/io.h"
 #include "gb/mem/region.h"
 #include "gb/mode.h"
 #include "gb/ppu.h"
 #include "gb/ppu/shared.h"
-
-#define GB_LOG_MAX_LEVEL LVL_INF
 
 //=======================================================================
 // The following is an outline of what information is needed for each
@@ -151,6 +151,13 @@ struct tile_info {
 	uint8_t end_x;
 	int16_t x;
 }; // end struct tile_info
+#define DUMPF_TILE_INFO(obj) \
+	#obj "={\n\t.index = " PRIu8 \
+	",\n\t.attribs = " PRIu8 \
+	",\n\t.row = " PRIu8 \
+	",\n\t.end_x = " PRIu8 \
+	",\n\t.x = " PRIu8 " }", \
+	(obj).index, (obj).attribs, (obj).row, (obj).end_x, (obj).x
 
 struct shift_bits {
 	int8_t curr; // Current bit
@@ -258,7 +265,7 @@ gb_ppu_draw_line(
 	}
 } // end gb_ppu_draw_line()
 //#undef GB_LOG_MAX_LEVEL
-//#define GB_LOG_MAX_LEVEL LVL_INF
+//#define GB_LOG_MAX_LEVEL PPU_LOG_LEVEL
 
 //=======================================================================
 static void
@@ -327,6 +334,8 @@ gb_ppu_encode_bg_layer_row(
 		uint8_t* restrict dst,
 		const struct bg_shared_info* restrict shared,
 		const struct bg_layer_info* restrict layer) {
+#undef GB_LOG_MAX_LEVEL
+#define GB_LOG_MAX_LEVEL LVL_TRC
 	assert(shared != NULL);
 	assert(layer != NULL);
 	uint8_t tilemap_row = layer->bg_row / PPU_TILE_LENGTH;
@@ -356,6 +365,8 @@ gb_ppu_encode_bg_layer_row(
 		tile.x += PPU_TILE_LENGTH;
 	} // end while (tile.x < tile.end_x)
 	return dst;
+#undef GB_LOG_MAX_LEVEL
+#define GB_LOG_MAX_LEVEL PPU_LOG_LEVEL
 } // end gb_ppu_encode_bg_layer_row()
 
 //=======================================================================
@@ -395,7 +406,7 @@ gb_ppu_encode_bg_tile_row(
 	return dst;
 } // end gb_ppu_encode_bg_tile_row()
 //#undef GB_LOG_MAX_LEVEL
-//#define GB_LOG_MAX_LEVEL LVL_INF
+//#define GB_LOG_MAX_LEVEL PPU_LOG_LEVEL
 
 //=======================================================================
 // def encode_obj_row()
@@ -404,6 +415,9 @@ encode_obj_row(
 		uint8_t* restrict dst,
 		const struct gb_ppu_state* restrict state,
 		uint8_t line) {
+#undef GB_LOG_MAX_LEVEL
+#define GB_LOG_MAX_LEVEL LVL_TRC
+	LOGT("call");
 	if (!(state->lcdc & IO_LCDC_OBJ_ENABLED))
 		return;
 
@@ -450,7 +464,10 @@ encode_obj_row(
 
 		uint8_t dst_offset = (tile_info.x < 0 ? 0 : tile_info.x);
 		encode_obj_tile_row(dst + dst_offset, state->vram, &obj_info, &tile_info);
+		LOGT("return");
 	} // end iteration over objv
+#undef GB_LOG_MAX_LEVEL
+#define GB_LOG_MAX_LEVEL PPU_LOG_LEVEL
 } // end encode_obj_row()
 
 //=======================================================================
@@ -520,7 +537,7 @@ encode_obj_tile_row(
 			bit.curr += bit.incr;
 		} // end incrementation over color bits
 	} // end ifelse BG does NOT yield priority
-} // end gb_ppu_encode_obj_tile_row()
+} // end encode_obj_tile_row()
 
 //=======================================================================
 // def select_line_objs()
@@ -802,7 +819,7 @@ resolve_palettes(
 	}
 } // end resolve_palettes()
 //#undef GB_LOG_MAX_LEVEL
-//#define GB_LOG_MAX_LEVEL LVL_INF
+//#define GB_LOG_MAX_LEVEL PPU_LOG_LEVEL
 
 //=======================================================================
 // def x_sort_objs()
